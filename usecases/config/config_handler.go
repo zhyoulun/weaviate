@@ -98,6 +98,12 @@ type Flags struct {
 	RuntimeOverridesEnabled      bool          `long:"runtime-overrides.enabled" description:"enable runtime overrides config"`
 	RuntimeOverridesPath         string        `long:"runtime-overrides.path" description:"path to runtime overrides config"`
 	RuntimeOverridesLoadInterval time.Duration `long:"runtime-overrides.load-interval" description:"load interval for runtime overrides config"`
+
+	// EmbeddedConfig is used by in-process embeddings to inject config directly
+	// without relying on config files.
+	EmbeddedConfig *WeaviateConfig
+	// SkipEnvOverrides disables environment-variable overrides when EmbeddedConfig is set.
+	SkipEnvOverrides bool
 }
 
 type SchemaHandlerConfig struct {
@@ -686,8 +692,23 @@ func (f *WeaviateConfig) GetHostAddress() string {
 // 3. Command line flags
 // If a config option is specified multiple times in different locations, the latest one will be used in this order.
 func (f *WeaviateConfig) LoadConfig(flags *swag.CommandLineOptionsGroup, logger logrus.FieldLogger) error {
+	inputFlags := flags.Options.(*Flags)
+
+	if inputFlags.EmbeddedConfig != nil {
+		*f = *inputFlags.EmbeddedConfig
+
+		if !inputFlags.SkipEnvOverrides {
+			if err := FromEnv(&f.Config); err != nil {
+				return configErr(err)
+			}
+		}
+
+		f.fromFlags(inputFlags)
+		return f.Config.Validate()
+	}
+
 	// Get command line flags
-	configFileName := flags.Options.(*Flags).ConfigFile
+	configFileName := inputFlags.ConfigFile
 	// Set default if not given
 	if configFileName == "" {
 		configFileName = DefaultConfigFile
@@ -716,7 +737,7 @@ func (f *WeaviateConfig) LoadConfig(flags *swag.CommandLineOptionsGroup, logger 
 	}
 
 	// Load config from flags
-	f.fromFlags(flags.Options.(*Flags))
+	f.fromFlags(inputFlags)
 
 	return f.Config.Validate()
 }

@@ -1,134 +1,93 @@
 package weaviateserver
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
+	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
+	opsobjects "github.com/weaviate/weaviate/adapters/handlers/rest/operations/objects"
+	opsschema "github.com/weaviate/weaviate/adapters/handlers/rest/operations/schema"
+	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
-func TestWeaviateServerStartAndShutdown(t *testing.T) {
+func TestWeaviateServerInProcessReadWrite(t *testing.T) {
 	ws, err := NewWeaviateServer(newWeaviateConfigForTest(t))
 	if err != nil {
 		t.Fatalf("new weaviate server: %v", err)
-	}
-
-	if err := ws.RESTServer().Listen(); err != nil {
-		t.Fatalf("listen on HTTP port: %v", err)
-	}
-
-	baseURL := fmt.Sprintf("http://%s:%d", ws.RESTServer().Host, ws.RESTServer().Port)
-	httpClient := &http.Client{Timeout: 2 * time.Second}
-
-	serveErrCh := make(chan error, 1)
-	go func() {
-		serveErrCh <- ws.Start()
-	}()
-
-	readyURL := baseURL + "/v1/.well-known/ready"
-	deadline := time.Now().Add(40 * time.Second)
-	for {
-		if time.Now().After(deadline) {
-			t.Fatalf("server did not become ready before timeout: %s", readyURL)
-		}
-
-		resp, reqErr := httpClient.Get(readyURL)
-		if reqErr == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-		}
-
-		time.Sleep(250 * time.Millisecond)
 	}
 
 	className := fmt.Sprintf("ServerReadWriteClass%d", time.Now().UnixNano())
 	objectID := uuid.NewString()
 	wantContent := "hello from weaviateserver test"
 
-	doJSONRequest(t, httpClient, http.MethodPost, baseURL+"/v1/schema", map[string]any{
-		"class":      className,
-		"vectorizer": "none",
-		"properties": []map[string]any{
-			{
-				"name":     "content",
-				"dataType": []string{"text"},
+	createClassResp, err := ws.SchemaObjectsCreate(opsschema.SchemaObjectsCreateParams{
+		ObjectClass: &models.Class{
+			Class:      className,
+			Vectorizer: "none",
+			Properties: []*models.Property{
+				{
+					Name:     "content",
+					DataType: []string{"text"},
+				},
 			},
 		},
-	}, http.StatusOK)
+	})
+	if err != nil {
+		t.Fatalf("create class: %v", err)
+	}
+	if createClassResp == nil || createClassResp.Payload == nil {
+		t.Fatalf("create class response payload is nil")
+	}
 
-	doJSONRequest(t, httpClient, http.MethodPost, baseURL+"/v1/objects", map[string]any{
-		"class": className,
-		"id":    objectID,
-		"properties": map[string]any{
-			"content": wantContent,
+	createObjectResp, err := ws.ObjectsCreate(opsobjects.ObjectsCreateParams{
+		Body: &models.Object{
+			Class: className,
+			ID:    strfmt.UUID(objectID),
+			Properties: map[string]any{
+				"content": wantContent,
+			},
+			Vector: models.C11yVector{0.11, 0.22, 0.33},
 		},
-		"vector": []float64{0.11, 0.22, 0.33},
-	}, http.StatusOK)
-
-	body := doJSONRequest(t, httpClient, http.MethodGet, fmt.Sprintf("%s/v1/objects/%s?class=%s", baseURL, objectID, url.QueryEscape(className)), nil, http.StatusOK)
-
-	var got struct {
-		Class      string         `json:"class"`
-		ID         string         `json:"id"`
-		Properties map[string]any `json:"properties"`
+	})
+	if err != nil {
+		t.Fatalf("create object: %v", err)
 	}
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("decode get object response: %v", err)
+	if createObjectResp == nil || createObjectResp.Payload == nil {
+		t.Fatalf("create object response payload is nil")
 	}
 
+	getObjectResp, err := ws.ObjectsClassGet(opsobjects.ObjectsClassGetParams{
+		ClassName: className,
+		ID:        strfmt.UUID(objectID),
+	})
+	if err != nil {
+		t.Fatalf("get object: %v", err)
+	}
+	if getObjectResp == nil || getObjectResp.Payload == nil {
+		t.Fatalf("get object response payload is nil")
+	}
+
+	got := getObjectResp.Payload
 	if got.Class != className {
 		t.Fatalf("unexpected class, got=%q want=%q", got.Class, className)
 	}
-	if got.ID != objectID {
-		t.Fatalf("unexpected object id, got=%q want=%q", got.ID, objectID)
+	if got.ID.String() != objectID {
+		t.Fatalf("unexpected object id, got=%q want=%q", got.ID.String(), objectID)
 	}
-	content, ok := got.Properties["content"].(string)
+	properties, ok := got.Properties.(map[string]any)
 	if !ok {
-		t.Fatalf("object content property missing or not a string: %#v", got.Properties["content"])
+		t.Fatalf("object properties are not a map: %#v", got.Properties)
+	}
+	content, ok := properties["content"].(string)
+	if !ok {
+		t.Fatalf("object content property missing or not a string: %#v", properties["content"])
 	}
 	if content != wantContent {
 		t.Fatalf("unexpected object content, got=%q want=%q", content, wantContent)
 	}
-
-	if err := ws.Shutdown(); err != nil {
-		t.Fatalf("shutdown weaviate server: %v", err)
-	}
-
-	select {
-	case serveErr := <-serveErrCh:
-		if serveErr != nil {
-			t.Fatalf("server returned error: %v", serveErr)
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("timeout waiting for server to exit after shutdown")
-	}
-}
-
-func getFreeTCPPort(t *testing.T) int {
-	t.Helper()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("find free port: %v", err)
-	}
-	defer listener.Close()
-
-	addr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		t.Fatalf("listener address is not TCP: %T", listener.Addr())
-	}
-
-	return addr.Port
 }
 
 func newWeaviateConfigForTest(t *testing.T) config.WeaviateConfig {
@@ -146,42 +105,4 @@ func newWeaviateConfigForTest(t *testing.T) config.WeaviateConfig {
 			DisableTelemetry:        true,
 		},
 	}
-}
-
-func doJSONRequest(t *testing.T, httpClient *http.Client, method, targetURL string, payload any, wantStatus int) []byte {
-	t.Helper()
-
-	var bodyReader io.Reader
-	if payload != nil {
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("marshal request body for %s %s: %v", method, targetURL, err)
-		}
-		bodyReader = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequest(method, targetURL, bodyReader)
-	if err != nil {
-		t.Fatalf("new request %s %s: %v", method, targetURL, err)
-	}
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("request %s %s failed: %v", method, targetURL, err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read response body for %s %s: %v", method, targetURL, err)
-	}
-
-	if resp.StatusCode != wantStatus {
-		t.Fatalf("unexpected status for %s %s, got=%d want=%d, body=%s", method, targetURL, resp.StatusCode, wantStatus, string(respBody))
-	}
-
-	return respBody
 }

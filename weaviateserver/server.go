@@ -12,11 +12,11 @@
 package weaviateserver
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"fmt"
 	"net"
-	"os"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 
@@ -31,26 +31,11 @@ import (
 // WeaviateServer 在进程内运行 Weaviate，启动流程与 cmd/weaviate-server/main.go 保持一致。
 type WeaviateServer struct {
 	server *rest.Server
+	api    *operations.WeaviateAPI
 }
 
 // NewWeaviateServer 使用传入的 WeaviateConfig 初始化一个可嵌入的 Weaviate 服务实例。
 func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, error) {
-	// 将传入配置写入临时文件，复用 Weaviate 现有的标准配置加载流程。
-	tempFile, err := os.CreateTemp("", "weaviateserver-config-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("create temp config file: %w", err)
-	}
-	tempFilePath := tempFile.Name()
-	defer os.Remove(tempFilePath)
-
-	if err := json.NewEncoder(tempFile).Encode(serverConfig.Config); err != nil {
-		_ = tempFile.Close()
-		return nil, fmt.Errorf("encode temp config file: %w", err)
-	}
-	if err := tempFile.Close(); err != nil {
-		return nil, fmt.Errorf("close temp config file: %w", err)
-	}
-
 	// 加载编译进二进制的 swagger 规范。
 	swaggerSpec, err := loads.Embedded(rest.SwaggerJSON, rest.FlatSwaggerJSON)
 	if err != nil {
@@ -70,14 +55,17 @@ func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, err
 
 	server.ConfigureFlags()
 	for _, optsGroup := range api.CommandLineOptionsGroups {
+		if opts, ok := optsGroup.Options.(*config.Flags); ok {
+			// 使用内存配置，避免依赖 config 文件。
+			opts.EmbeddedConfig = &serverConfig
+		}
 		if _, err := parser.AddGroup(optsGroup.ShortDescription, optsGroup.LongDescription, optsGroup.Options); err != nil {
 			return nil, fmt.Errorf("add options group %q: %w", optsGroup.ShortDescription, err)
 		}
 	}
 
-	// 通过 --config-file 触发标准 LoadConfig 路径。
-	parseArgs := []string{fmt.Sprintf("--config-file=%s", tempFilePath)}
-	if _, err := parser.ParseArgs(parseArgs); err != nil {
+	// 解析空参数以应用默认 CLI 值，并保留与主程序一致的解析流程。
+	if _, err := parser.ParseArgs([]string{}); err != nil {
 		return nil, fmt.Errorf("parse weaviate server args: %w", err)
 	}
 
@@ -88,7 +76,7 @@ func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, err
 	server.ConfigureAPI()
 
 	// 返回进程内服务包装对象。
-	return &WeaviateServer{server: server}, nil
+	return &WeaviateServer{server: server, api: api}, nil
 }
 
 func configureServerListener(server *rest.Server, serverConfig config.WeaviateConfig) {
@@ -121,26 +109,34 @@ func configureServerListener(server *rest.Server, serverConfig config.WeaviateCo
 	}
 }
 
-// Start blocks while serving Weaviate.
-func (ws *WeaviateServer) Start() error {
-	if ws == nil || ws.server == nil {
-		return errors.New("weaviate server is not initialized")
-	}
-	return ws.server.Serve()
-}
+// // Start blocks while serving Weaviate.
+// func (ws *WeaviateServer) Start() error {
+// 	if ws == nil || ws.server == nil {
+// 		return errors.New("weaviate server is not initialized")
+// 	}
+// 	return ws.server.Serve()
+// }
 
-// Shutdown gracefully stops a running server.
-func (ws *WeaviateServer) Shutdown() error {
-	if ws == nil || ws.server == nil {
-		return nil
-	}
-	return ws.server.Shutdown()
-}
+// // Shutdown gracefully stops a running server.
+// func (ws *WeaviateServer) Shutdown() error {
+// 	if ws == nil || ws.server == nil {
+// 		return nil
+// 	}
+// 	return ws.server.Shutdown()
+// }
 
-// RESTServer returns the underlying generated REST server.
-func (ws *WeaviateServer) RESTServer() *rest.Server {
-	if ws == nil {
-		return nil
+// // RESTServer returns the underlying generated REST server.
+// func (ws *WeaviateServer) RESTServer() *rest.Server {
+// 	if ws == nil {
+// 		return nil
+// 	}
+// 	return ws.server
+// }
+
+func newInProcessRequest(ctx context.Context, method, path string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	if ctx != nil {
+		req = req.WithContext(ctx)
 	}
-	return ws.server
+	return req
 }
