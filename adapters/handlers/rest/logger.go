@@ -14,6 +14,7 @@ package rest
 import (
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/usecases/build"
@@ -45,6 +46,48 @@ func (wf *WeaviateJSONFormatter) Format(e *logrus.Entry) ([]byte, error) {
 type WeaviateTextFormatter struct {
 	*logrus.TextFormatter
 	gitHash, imageTag, serverVersion, goVersion string
+}
+
+// StartupLoggerConfig allows callers that embed the REST server to configure
+// startup logging without relying on process-wide environment variables.
+type StartupLoggerConfig struct {
+	Level      string
+	Format     string
+	Path       string
+	DisableEnv bool
+}
+
+var (
+	startupLoggerConfigMu sync.RWMutex
+	startupLoggerConfig   *StartupLoggerConfig
+)
+
+// SetStartupLoggerConfig overrides startup logger settings for subsequent
+// logger initializations and returns a restore function.
+func SetStartupLoggerConfig(cfg StartupLoggerConfig) func() {
+	startupLoggerConfigMu.Lock()
+	prev := startupLoggerConfig
+	cfgCopy := cfg
+	startupLoggerConfig = &cfgCopy
+	startupLoggerConfigMu.Unlock()
+
+	return func() {
+		startupLoggerConfigMu.Lock()
+		startupLoggerConfig = prev
+		startupLoggerConfigMu.Unlock()
+	}
+}
+
+func getStartupLoggerConfig() *StartupLoggerConfig {
+	startupLoggerConfigMu.RLock()
+	defer startupLoggerConfigMu.RUnlock()
+
+	if startupLoggerConfig == nil {
+		return nil
+	}
+
+	cfg := *startupLoggerConfig
+	return &cfg
 }
 
 func NewWeaviateTextFormatter() logrus.Formatter {

@@ -125,6 +125,10 @@ func newWeaviateConfigForTest(t *testing.T) Config {
 				"model":   "openai/text-embedding-3-small",
 			},
 		},
+		Log: LogConfig{
+			Level:  "warn",
+			Format: "text",
+		},
 		OpenaiAPIKey: "test-openai-api-key",
 	}
 }

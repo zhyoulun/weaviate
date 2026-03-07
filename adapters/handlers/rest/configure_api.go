@@ -1265,26 +1265,78 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 }
 
 // logger does not parse the regular config object, as logging needs to be
-// configured before the configuration is even loaded/parsed. We are thus
-// "manually" reading the desired env vars and set reasonable defaults if they
-// are not set.
+// configured before the configuration is even loaded/parsed. We thus either use
+// a startup override (for embedded use cases) or read env vars directly.
 //
 // Defaults to log level info and json format
 func logger() *logrus.Logger {
 	logger := logrus.New()
 	logger.SetFormatter(NewWeaviateTextFormatter())
 
-	if os.Getenv("LOG_FORMAT") != "text" {
-		logger.SetFormatter(NewWeaviateJSONFormatter())
+	cfg := getStartupLoggerConfig()
+	if cfg != nil && cfg.DisableEnv {
+		applyLogFormat(logger, cfg.Format)
+		setLoggerLevel(logger, cfg.Level, "log_level_config", false)
+		applyLogPath(logger, cfg.Path)
+		return logger
 	}
+
+	logFormat := os.Getenv("LOG_FORMAT")
 	logLevelStr := os.Getenv("LOG_LEVEL")
-	level, err := logLevelFromString(logLevelStr)
+	logPath := ""
+	if cfg != nil {
+		if cfg.Format != "" {
+			logFormat = cfg.Format
+		}
+		if cfg.Level != "" {
+			logLevelStr = cfg.Level
+		}
+		logPath = cfg.Path
+	}
+
+	applyLogFormat(logger, logFormat)
+	setLoggerLevel(logger, logLevelStr, "log_level_env", true)
+	applyLogPath(logger, logPath)
+	return logger
+}
+
+func applyLogFormat(logger *logrus.Logger, format string) {
+	if strings.EqualFold(strings.TrimSpace(format), "text") {
+		logger.SetFormatter(NewWeaviateTextFormatter())
+		return
+	}
+	logger.SetFormatter(NewWeaviateJSONFormatter())
+}
+
+func setLoggerLevel(logger *logrus.Logger, levelStr, warnField string, warnOnEmpty bool) {
+	levelStr = strings.TrimSpace(levelStr)
+	if levelStr == "" && !warnOnEmpty {
+		logger.SetLevel(logrus.InfoLevel)
+		return
+	}
+
+	level, err := logLevelFromString(levelStr)
 	if errors.Is(err, errlogLevelNotRecognized) {
-		logger.WithField("log_level_env", logLevelStr).Warn("log level not recognized, defaulting to info")
+		logger.WithField(warnField, levelStr).Warn("log level not recognized, defaulting to info")
 		level = logrus.InfoLevel
 	}
 	logger.SetLevel(level)
-	return logger
+}
+
+func applyLogPath(logger *logrus.Logger, path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		logger.WithField("log_path", path).WithError(err).
+			Warn("cannot open log path, defaulting to standard logger output")
+		return
+	}
+
+	logger.SetOutput(f)
 }
 
 // everything hard-coded right now, to be made dynamic (from go plugins later)

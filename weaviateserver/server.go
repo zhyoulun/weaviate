@@ -36,10 +36,18 @@ type WeaviateServer struct {
 	cfg    Config
 }
 
+// LogConfig controls startup logger behavior for the embedded server.
+type LogConfig struct {
+	Level  string
+	Format string
+	Path   string
+}
+
 // Config 聚合了服务级 WeaviateConfig 和集合级 ModuleConfig。
 type Config struct {
 	WeaviateConfig config.WeaviateConfig
 	ModuleConfig   map[string]any
+	Log            LogConfig
 	// OpenaiAPIKey is used to inject X-Openai-Api-Key into in-process requests.
 	// This allows OpenAI-compatible vectorizers (such as OpenRouter via text2vec-openai)
 	// to run without relying on process environment variables.
@@ -91,6 +99,14 @@ func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
 
 	// 在进程内配置监听参数，嵌入场景默认使用 HTTP。
 	configureServerListener(server, serverConfig)
+
+	restoreLoggerConfig := rest.SetStartupLoggerConfig(rest.StartupLoggerConfig{
+		Level:      cfg.Log.Level,
+		Format:     cfg.Log.Format,
+		Path:       cfg.Log.Path,
+		DisableEnv: true,
+	})
+	defer restoreLoggerConfig()
 
 	// 完成 handler、app state、模块及运行时依赖的装配。
 	server.ConfigureAPI()
