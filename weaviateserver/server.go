@@ -25,6 +25,7 @@ import (
 
 	"github.com/weaviate/weaviate/adapters/handlers/rest"
 	"github.com/weaviate/weaviate/adapters/handlers/rest/operations"
+	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
@@ -32,10 +33,29 @@ import (
 type WeaviateServer struct {
 	server *rest.Server
 	api    *operations.WeaviateAPI
+	cfg    Config
+}
+
+// Config 聚合了服务级 WeaviateConfig 和集合级 ModuleConfig。
+type Config struct {
+	WeaviateConfig config.WeaviateConfig
+	ModuleConfig   map[string]any
+	// OpenaiAPIKey is used to inject X-Openai-Api-Key into in-process requests.
+	// This allows OpenAI-compatible vectorizers (such as OpenRouter via text2vec-openai)
+	// to run without relying on process environment variables.
+	OpenaiAPIKey string
 }
 
 // NewWeaviateServer 使用传入的 WeaviateConfig 初始化一个可嵌入的 Weaviate 服务实例。
+// 该函数保留向后兼容，等价于 NewWeaviateServerWithConfig(Config{WeaviateConfig: serverConfig})。
 func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, error) {
+	return NewWeaviateServerWithConfig(Config{WeaviateConfig: serverConfig})
+}
+
+// NewWeaviateServerWithConfig 使用聚合 Config 初始化可嵌入的 Weaviate 服务实例。
+func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
+	serverConfig := cfg.WeaviateConfig
+
 	// 加载编译进二进制的 swagger 规范。
 	swaggerSpec, err := loads.Embedded(rest.SwaggerJSON, rest.FlatSwaggerJSON)
 	if err != nil {
@@ -76,7 +96,7 @@ func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, err
 	server.ConfigureAPI()
 
 	// 返回进程内服务包装对象。
-	return &WeaviateServer{server: server, api: api}, nil
+	return &WeaviateServer{server: server, api: api, cfg: cfg}, nil
 }
 
 func configureServerListener(server *rest.Server, serverConfig config.WeaviateConfig) {
@@ -107,6 +127,64 @@ func configureServerListener(server *rest.Server, serverConfig config.WeaviateCo
 		server.Host = host
 		server.Port = port
 	}
+}
+
+// Config 返回初始化时传入的聚合配置。
+func (ws *WeaviateServer) Config() Config {
+	if ws == nil {
+		return Config{}
+	}
+	return ws.cfg
+}
+
+func (ws *WeaviateServer) applyConfiguredModuleConfig(class *models.Class) {
+	if ws == nil || class == nil || len(ws.cfg.ModuleConfig) == 0 {
+		return
+	}
+
+	defaultCfg := copyAnyMap(ws.cfg.ModuleConfig)
+	if class.ModuleConfig == nil {
+		class.ModuleConfig = defaultCfg
+		return
+	}
+
+	classCfg, ok := class.ModuleConfig.(map[string]any)
+	if !ok {
+		return
+	}
+
+	for k, v := range classCfg {
+		defaultCfg[k] = v
+	}
+	class.ModuleConfig = defaultCfg
+}
+
+func copyAnyMap(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func (ws *WeaviateServer) withConfiguredAPIKeys(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ws == nil || ws.cfg.OpenaiAPIKey == "" {
+		return ctx
+	}
+
+	// Keep explicit per-request values if the caller already set one.
+	if existing := ctx.Value("X-Openai-Api-Key"); existing != nil {
+		return ctx
+	}
+
+	return context.WithValue(ctx, "X-Openai-Api-Key", []string{ws.cfg.OpenaiAPIKey})
+}
+
+func (ws *WeaviateServer) newInProcessRequest(ctx context.Context, method, path string) *http.Request {
+	return newInProcessRequest(ws.withConfiguredAPIKeys(ctx), method, path)
 }
 
 // // Start blocks while serving Weaviate.

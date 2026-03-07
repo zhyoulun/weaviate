@@ -32,7 +32,7 @@ func (ws *WeaviateServer) WeaviateRoot(params opsroot.WeaviateRootParams) (*opsr
 		return nil, errors.New("weaviateroot handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1")
 	}
 
 	responder := ws.api.WeaviateRootHandler.Handle(params, nil)
@@ -53,7 +53,7 @@ func (ws *WeaviateServer) WeaviateWellknownLiveness(params opsroot.WeaviateWellk
 		return nil, errors.New("weaviatewellknownliveness handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/.well-known/live")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/.well-known/live")
 	}
 
 	responder := ws.api.WeaviateWellknownLivenessHandler.Handle(params, nil)
@@ -74,7 +74,7 @@ func (ws *WeaviateServer) WeaviateWellknownReadiness(params opsroot.WeaviateWell
 		return nil, errors.New("weaviatewellknownreadiness handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/.well-known/ready")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/.well-known/ready")
 	}
 
 	responder := ws.api.WeaviateWellknownReadinessHandler.Handle(params, nil)
@@ -95,7 +95,7 @@ func (ws *WeaviateServer) AddPermissions(params opsauthz.AddPermissionsParams) (
 		return nil, errors.New("authzaddpermissions handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/add-permissions")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/add-permissions")
 	}
 
 	responder := ws.api.AuthzAddPermissionsHandler.Handle(params, nil)
@@ -116,7 +116,7 @@ func (ws *WeaviateServer) AssignRoleToGroup(params opsauthz.AssignRoleToGroupPar
 		return nil, errors.New("authzassignroletogroup handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/groups/{id}/assign")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/groups/{id}/assign")
 	}
 
 	responder := ws.api.AuthzAssignRoleToGroupHandler.Handle(params, nil)
@@ -137,7 +137,7 @@ func (ws *WeaviateServer) AssignRoleToUser(params opsauthz.AssignRoleToUserParam
 		return nil, errors.New("authzassignroletouser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/users/{id}/assign")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/users/{id}/assign")
 	}
 
 	responder := ws.api.AuthzAssignRoleToUserHandler.Handle(params, nil)
@@ -158,7 +158,7 @@ func (ws *WeaviateServer) CreateRole(params opsauthz.CreateRoleParams) (*opsauth
 		return nil, errors.New("authzcreaterole handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/roles")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/roles")
 	}
 
 	responder := ws.api.AuthzCreateRoleHandler.Handle(params, nil)
@@ -179,7 +179,7 @@ func (ws *WeaviateServer) DeleteRole(params opsauthz.DeleteRoleParams) (*opsauth
 		return nil, errors.New("authzdeleterole handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/authz/roles/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/authz/roles/{id}")
 	}
 
 	responder := ws.api.AuthzDeleteRoleHandler.Handle(params, nil)
@@ -200,7 +200,7 @@ func (ws *WeaviateServer) GetGroups(params opsauthz.GetGroupsParams) (*opsauthz.
 		return nil, errors.New("authzgetgroups handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/groups/{groupType}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/groups/{groupType}")
 	}
 
 	responder := ws.api.AuthzGetGroupsHandler.Handle(params, nil)
@@ -221,7 +221,7 @@ func (ws *WeaviateServer) GetGroupsForRole(params opsauthz.GetGroupsForRoleParam
 		return nil, errors.New("authzgetgroupsforrole handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/group-assignments")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/group-assignments")
 	}
 
 	responder := ws.api.AuthzGetGroupsForRoleHandler.Handle(params, nil)
@@ -242,7 +242,7 @@ func (ws *WeaviateServer) GetRole(params opsauthz.GetRoleParams) (*opsauthz.GetR
 		return nil, errors.New("authzgetrole handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}")
 	}
 
 	responder := ws.api.AuthzGetRoleHandler.Handle(params, nil)
@@ -263,7 +263,7 @@ func (ws *WeaviateServer) GetRoles(params opsauthz.GetRolesParams) (*opsauthz.Ge
 		return nil, errors.New("authzgetroles handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/roles")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/roles")
 	}
 
 	responder := ws.api.AuthzGetRolesHandler.Handle(params, nil)
@@ -284,7 +284,7 @@ func (ws *WeaviateServer) GetRolesForGroup(params opsauthz.GetRolesForGroupParam
 		return nil, errors.New("authzgetrolesforgroup handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/groups/{id}/roles/{groupType}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/groups/{id}/roles/{groupType}")
 	}
 
 	responder := ws.api.AuthzGetRolesForGroupHandler.Handle(params, nil)
@@ -305,7 +305,7 @@ func (ws *WeaviateServer) GetRolesForUser(params opsauthz.GetRolesForUserParams)
 		return nil, errors.New("authzgetrolesforuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/users/{id}/roles/{userType}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/users/{id}/roles/{userType}")
 	}
 
 	responder := ws.api.AuthzGetRolesForUserHandler.Handle(params, nil)
@@ -326,7 +326,7 @@ func (ws *WeaviateServer) GetRolesForUserDeprecated(params opsauthz.GetRolesForU
 		return nil, errors.New("authzgetrolesforuserdeprecated handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/users/{id}/roles")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/users/{id}/roles")
 	}
 
 	responder := ws.api.AuthzGetRolesForUserDeprecatedHandler.Handle(params, nil)
@@ -347,7 +347,7 @@ func (ws *WeaviateServer) GetUsersForRole(params opsauthz.GetUsersForRoleParams)
 		return nil, errors.New("authzgetusersforrole handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/user-assignments")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/user-assignments")
 	}
 
 	responder := ws.api.AuthzGetUsersForRoleHandler.Handle(params, nil)
@@ -368,7 +368,7 @@ func (ws *WeaviateServer) GetUsersForRoleDeprecated(params opsauthz.GetUsersForR
 		return nil, errors.New("authzgetusersforroledeprecated handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/users")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/authz/roles/{id}/users")
 	}
 
 	responder := ws.api.AuthzGetUsersForRoleDeprecatedHandler.Handle(params, nil)
@@ -389,7 +389,7 @@ func (ws *WeaviateServer) HasPermission(params opsauthz.HasPermissionParams) (*o
 		return nil, errors.New("authzhaspermission handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/has-permission")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/has-permission")
 	}
 
 	responder := ws.api.AuthzHasPermissionHandler.Handle(params, nil)
@@ -410,7 +410,7 @@ func (ws *WeaviateServer) RemovePermissions(params opsauthz.RemovePermissionsPar
 		return nil, errors.New("authzremovepermissions handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/remove-permissions")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/roles/{id}/remove-permissions")
 	}
 
 	responder := ws.api.AuthzRemovePermissionsHandler.Handle(params, nil)
@@ -431,7 +431,7 @@ func (ws *WeaviateServer) RevokeRoleFromGroup(params opsauthz.RevokeRoleFromGrou
 		return nil, errors.New("authzrevokerolefromgroup handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/groups/{id}/revoke")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/groups/{id}/revoke")
 	}
 
 	responder := ws.api.AuthzRevokeRoleFromGroupHandler.Handle(params, nil)
@@ -452,7 +452,7 @@ func (ws *WeaviateServer) RevokeRoleFromUser(params opsauthz.RevokeRoleFromUserP
 		return nil, errors.New("authzrevokerolefromuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/authz/users/{id}/revoke")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/authz/users/{id}/revoke")
 	}
 
 	responder := ws.api.AuthzRevokeRoleFromUserHandler.Handle(params, nil)
@@ -473,7 +473,7 @@ func (ws *WeaviateServer) BackupsCancel(params opsbackups.BackupsCancelParams) (
 		return nil, errors.New("backupsbackupscancel handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/backups/{backend}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/backups/{backend}/{id}")
 	}
 
 	responder := ws.api.BackupsBackupsCancelHandler.Handle(params, nil)
@@ -494,7 +494,7 @@ func (ws *WeaviateServer) BackupsCreate(params opsbackups.BackupsCreateParams) (
 		return nil, errors.New("backupsbackupscreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/backups/{backend}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/backups/{backend}")
 	}
 
 	responder := ws.api.BackupsBackupsCreateHandler.Handle(params, nil)
@@ -515,7 +515,7 @@ func (ws *WeaviateServer) BackupsCreateStatus(params opsbackups.BackupsCreateSta
 		return nil, errors.New("backupsbackupscreatestatus handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/backups/{backend}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/backups/{backend}/{id}")
 	}
 
 	responder := ws.api.BackupsBackupsCreateStatusHandler.Handle(params, nil)
@@ -536,7 +536,7 @@ func (ws *WeaviateServer) BackupsList(params opsbackups.BackupsListParams) (*ops
 		return nil, errors.New("backupsbackupslist handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/backups/{backend}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/backups/{backend}")
 	}
 
 	responder := ws.api.BackupsBackupsListHandler.Handle(params, nil)
@@ -557,7 +557,7 @@ func (ws *WeaviateServer) BackupsRestore(params opsbackups.BackupsRestoreParams)
 		return nil, errors.New("backupsbackupsrestore handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/backups/{backend}/{id}/restore")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/backups/{backend}/{id}/restore")
 	}
 
 	responder := ws.api.BackupsBackupsRestoreHandler.Handle(params, nil)
@@ -578,7 +578,7 @@ func (ws *WeaviateServer) BackupsRestoreCancel(params opsbackups.BackupsRestoreC
 		return nil, errors.New("backupsbackupsrestorecancel handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/backups/{backend}/{id}/restore")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/backups/{backend}/{id}/restore")
 	}
 
 	responder := ws.api.BackupsBackupsRestoreCancelHandler.Handle(params, nil)
@@ -599,7 +599,7 @@ func (ws *WeaviateServer) BackupsRestoreStatus(params opsbackups.BackupsRestoreS
 		return nil, errors.New("backupsbackupsrestorestatus handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/backups/{backend}/{id}/restore")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/backups/{backend}/{id}/restore")
 	}
 
 	responder := ws.api.BackupsBackupsRestoreStatusHandler.Handle(params, nil)
@@ -620,7 +620,7 @@ func (ws *WeaviateServer) BatchObjectsCreate(params opsbatch.BatchObjectsCreateP
 		return nil, errors.New("batchbatchobjectscreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/batch/objects")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/batch/objects")
 	}
 
 	responder := ws.api.BatchBatchObjectsCreateHandler.Handle(params, nil)
@@ -641,7 +641,7 @@ func (ws *WeaviateServer) BatchObjectsDelete(params opsbatch.BatchObjectsDeleteP
 		return nil, errors.New("batchbatchobjectsdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/batch/objects")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/batch/objects")
 	}
 
 	responder := ws.api.BatchBatchObjectsDeleteHandler.Handle(params, nil)
@@ -662,7 +662,7 @@ func (ws *WeaviateServer) BatchReferencesCreate(params opsbatch.BatchReferencesC
 		return nil, errors.New("batchbatchreferencescreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/batch/references")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/batch/references")
 	}
 
 	responder := ws.api.BatchBatchReferencesCreateHandler.Handle(params, nil)
@@ -683,7 +683,7 @@ func (ws *WeaviateServer) ClassificationsGet(params opsclassifications.Classific
 		return nil, errors.New("classificationsclassificationsget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/classifications/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/classifications/{id}")
 	}
 
 	responder := ws.api.ClassificationsClassificationsGetHandler.Handle(params, nil)
@@ -704,7 +704,7 @@ func (ws *WeaviateServer) ClassificationsPost(params opsclassifications.Classifi
 		return nil, errors.New("classificationsclassificationspost handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/classifications")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/classifications")
 	}
 
 	responder := ws.api.ClassificationsClassificationsPostHandler.Handle(params, nil)
@@ -725,7 +725,7 @@ func (ws *WeaviateServer) ClusterGetStatistics(params opscluster.ClusterGetStati
 		return nil, errors.New("clusterclustergetstatistics handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/cluster/statistics")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/cluster/statistics")
 	}
 
 	responder := ws.api.ClusterClusterGetStatisticsHandler.Handle(params, nil)
@@ -746,7 +746,7 @@ func (ws *WeaviateServer) DistributedTasksGet(params opsdistributed_tasks.Distri
 		return nil, errors.New("distributedtasksdistributedtasksget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/tasks")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/tasks")
 	}
 
 	responder := ws.api.DistributedTasksDistributedTasksGetHandler.Handle(params, nil)
@@ -767,7 +767,7 @@ func (ws *WeaviateServer) ExportCreate(params opsexport.ExportCreateParams) (*op
 		return nil, errors.New("exportexportcreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/export/{backend}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/export/{backend}")
 	}
 
 	responder := ws.api.ExportExportCreateHandler.Handle(params, nil)
@@ -788,7 +788,7 @@ func (ws *WeaviateServer) ExportStatus(params opsexport.ExportStatusParams) (*op
 		return nil, errors.New("exportexportstatus handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/export/{backend}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/export/{backend}/{id}")
 	}
 
 	responder := ws.api.ExportExportStatusHandler.Handle(params, nil)
@@ -809,7 +809,7 @@ func (ws *WeaviateServer) GraphqlBatch(params opsgraphql.GraphqlBatchParams) (*o
 		return nil, errors.New("graphqlgraphqlbatch handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/graphql/batch")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/graphql/batch")
 	}
 
 	responder := ws.api.GraphqlGraphqlBatchHandler.Handle(params, nil)
@@ -830,7 +830,7 @@ func (ws *WeaviateServer) GraphqlPost(params opsgraphql.GraphqlPostParams) (*ops
 		return nil, errors.New("graphqlgraphqlpost handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/graphql")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/graphql")
 	}
 
 	responder := ws.api.GraphqlGraphqlPostHandler.Handle(params, nil)
@@ -851,7 +851,7 @@ func (ws *WeaviateServer) MetaGet(params opsmeta.MetaGetParams) (*opsmeta.MetaGe
 		return nil, errors.New("metametaget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/meta")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/meta")
 	}
 
 	responder := ws.api.MetaMetaGetHandler.Handle(params, nil)
@@ -872,7 +872,7 @@ func (ws *WeaviateServer) NodesGet(params opsnodes.NodesGetParams) (*opsnodes.No
 		return nil, errors.New("nodesnodesget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/nodes")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/nodes")
 	}
 
 	responder := ws.api.NodesNodesGetHandler.Handle(params, nil)
@@ -893,7 +893,7 @@ func (ws *WeaviateServer) NodesGetClass(params opsnodes.NodesGetClassParams) (*o
 		return nil, errors.New("nodesnodesgetclass handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/nodes/{className}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/nodes/{className}")
 	}
 
 	responder := ws.api.NodesNodesGetClassHandler.Handle(params, nil)
@@ -914,7 +914,7 @@ func (ws *WeaviateServer) ObjectsClassDelete(params opsobjects.ObjectsClassDelet
 		return nil, errors.New("objectsobjectsclassdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/objects/{className}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/objects/{className}/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassDeleteHandler.Handle(params, nil)
@@ -935,7 +935,7 @@ func (ws *WeaviateServer) ObjectsClassGet(params opsobjects.ObjectsClassGetParam
 		return nil, errors.New("objectsobjectsclassget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/objects/{className}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/objects/{className}/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassGetHandler.Handle(params, nil)
@@ -956,7 +956,7 @@ func (ws *WeaviateServer) ObjectsClassHead(params opsobjects.ObjectsClassHeadPar
 		return nil, errors.New("objectsobjectsclasshead handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "HEAD", "/v1/objects/{className}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "HEAD", "/v1/objects/{className}/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassHeadHandler.Handle(params, nil)
@@ -977,7 +977,7 @@ func (ws *WeaviateServer) ObjectsClassPatch(params opsobjects.ObjectsClassPatchP
 		return nil, errors.New("objectsobjectsclasspatch handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PATCH", "/v1/objects/{className}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PATCH", "/v1/objects/{className}/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassPatchHandler.Handle(params, nil)
@@ -998,7 +998,7 @@ func (ws *WeaviateServer) ObjectsClassPut(params opsobjects.ObjectsClassPutParam
 		return nil, errors.New("objectsobjectsclassput handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/objects/{className}/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/objects/{className}/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassPutHandler.Handle(params, nil)
@@ -1019,7 +1019,7 @@ func (ws *WeaviateServer) ObjectsClassReferencesCreate(params opsobjects.Objects
 		return nil, errors.New("objectsobjectsclassreferencescreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/objects/{className}/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/objects/{className}/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassReferencesCreateHandler.Handle(params, nil)
@@ -1040,7 +1040,7 @@ func (ws *WeaviateServer) ObjectsClassReferencesDelete(params opsobjects.Objects
 		return nil, errors.New("objectsobjectsclassreferencesdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/objects/{className}/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/objects/{className}/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassReferencesDeleteHandler.Handle(params, nil)
@@ -1061,7 +1061,7 @@ func (ws *WeaviateServer) ObjectsClassReferencesPut(params opsobjects.ObjectsCla
 		return nil, errors.New("objectsobjectsclassreferencesput handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/objects/{className}/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/objects/{className}/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsClassReferencesPutHandler.Handle(params, nil)
@@ -1082,7 +1082,7 @@ func (ws *WeaviateServer) ObjectsCreate(params opsobjects.ObjectsCreateParams) (
 		return nil, errors.New("objectsobjectscreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/objects")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/objects")
 	}
 
 	responder := ws.api.ObjectsObjectsCreateHandler.Handle(params, nil)
@@ -1103,7 +1103,7 @@ func (ws *WeaviateServer) ObjectsDelete(params opsobjects.ObjectsDeleteParams) (
 		return nil, errors.New("objectsobjectsdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/objects/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/objects/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsDeleteHandler.Handle(params, nil)
@@ -1124,7 +1124,7 @@ func (ws *WeaviateServer) ObjectsGet(params opsobjects.ObjectsGetParams) (*opsob
 		return nil, errors.New("objectsobjectsget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/objects/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/objects/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsGetHandler.Handle(params, nil)
@@ -1145,7 +1145,7 @@ func (ws *WeaviateServer) ObjectsHead(params opsobjects.ObjectsHeadParams) (*ops
 		return nil, errors.New("objectsobjectshead handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "HEAD", "/v1/objects/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "HEAD", "/v1/objects/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsHeadHandler.Handle(params, nil)
@@ -1166,7 +1166,7 @@ func (ws *WeaviateServer) ObjectsList(params opsobjects.ObjectsListParams) (*ops
 		return nil, errors.New("objectsobjectslist handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/objects")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/objects")
 	}
 
 	responder := ws.api.ObjectsObjectsListHandler.Handle(params, nil)
@@ -1187,7 +1187,7 @@ func (ws *WeaviateServer) ObjectsPatch(params opsobjects.ObjectsPatchParams) (*o
 		return nil, errors.New("objectsobjectspatch handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PATCH", "/v1/objects/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PATCH", "/v1/objects/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsPatchHandler.Handle(params, nil)
@@ -1208,7 +1208,7 @@ func (ws *WeaviateServer) ObjectsReferencesCreate(params opsobjects.ObjectsRefer
 		return nil, errors.New("objectsobjectsreferencescreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/objects/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/objects/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsReferencesCreateHandler.Handle(params, nil)
@@ -1229,7 +1229,7 @@ func (ws *WeaviateServer) ObjectsReferencesDelete(params opsobjects.ObjectsRefer
 		return nil, errors.New("objectsobjectsreferencesdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/objects/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/objects/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsReferencesDeleteHandler.Handle(params, nil)
@@ -1250,7 +1250,7 @@ func (ws *WeaviateServer) ObjectsReferencesUpdate(params opsobjects.ObjectsRefer
 		return nil, errors.New("objectsobjectsreferencesupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/objects/{id}/references/{propertyName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/objects/{id}/references/{propertyName}")
 	}
 
 	responder := ws.api.ObjectsObjectsReferencesUpdateHandler.Handle(params, nil)
@@ -1271,7 +1271,7 @@ func (ws *WeaviateServer) ObjectsUpdate(params opsobjects.ObjectsUpdateParams) (
 		return nil, errors.New("objectsobjectsupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/objects/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/objects/{id}")
 	}
 
 	responder := ws.api.ObjectsObjectsUpdateHandler.Handle(params, nil)
@@ -1292,7 +1292,7 @@ func (ws *WeaviateServer) ObjectsValidate(params opsobjects.ObjectsValidateParam
 		return nil, errors.New("objectsobjectsvalidate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/objects/validate")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/objects/validate")
 	}
 
 	responder := ws.api.ObjectsObjectsValidateHandler.Handle(params, nil)
@@ -1313,7 +1313,7 @@ func (ws *WeaviateServer) ApplyReplicationScalePlan(params opsreplication.ApplyR
 		return nil, errors.New("replicationapplyreplicationscaleplan handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/replication/scale")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/replication/scale")
 	}
 
 	responder := ws.api.ReplicationApplyReplicationScalePlanHandler.Handle(params, nil)
@@ -1334,7 +1334,7 @@ func (ws *WeaviateServer) CancelReplication(params opsreplication.CancelReplicat
 		return nil, errors.New("replicationcancelreplication handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/replication/replicate/{id}/cancel")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/replication/replicate/{id}/cancel")
 	}
 
 	responder := ws.api.ReplicationCancelReplicationHandler.Handle(params, nil)
@@ -1355,7 +1355,7 @@ func (ws *WeaviateServer) DeleteAllReplications(params opsreplication.DeleteAllR
 		return nil, errors.New("replicationdeleteallreplications handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/replication/replicate")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/replication/replicate")
 	}
 
 	responder := ws.api.ReplicationDeleteAllReplicationsHandler.Handle(params, nil)
@@ -1376,7 +1376,7 @@ func (ws *WeaviateServer) DeleteReplication(params opsreplication.DeleteReplicat
 		return nil, errors.New("replicationdeletereplication handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/replication/replicate/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/replication/replicate/{id}")
 	}
 
 	responder := ws.api.ReplicationDeleteReplicationHandler.Handle(params, nil)
@@ -1397,7 +1397,7 @@ func (ws *WeaviateServer) ForceDeleteReplications(params opsreplication.ForceDel
 		return nil, errors.New("replicationforcedeletereplications handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/replication/replicate/force-delete")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/replication/replicate/force-delete")
 	}
 
 	responder := ws.api.ReplicationForceDeleteReplicationsHandler.Handle(params, nil)
@@ -1418,7 +1418,7 @@ func (ws *WeaviateServer) GetCollectionShardingState(params opsreplication.GetCo
 		return nil, errors.New("replicationgetcollectionshardingstate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/replication/sharding-state")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/replication/sharding-state")
 	}
 
 	responder := ws.api.ReplicationGetCollectionShardingStateHandler.Handle(params, nil)
@@ -1439,7 +1439,7 @@ func (ws *WeaviateServer) GetReplicationScalePlan(params opsreplication.GetRepli
 		return nil, errors.New("replicationgetreplicationscaleplan handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/replication/scale")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/replication/scale")
 	}
 
 	responder := ws.api.ReplicationGetReplicationScalePlanHandler.Handle(params, nil)
@@ -1460,7 +1460,7 @@ func (ws *WeaviateServer) ListReplication(params opsreplication.ListReplicationP
 		return nil, errors.New("replicationlistreplication handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/replication/replicate/list")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/replication/replicate/list")
 	}
 
 	responder := ws.api.ReplicationListReplicationHandler.Handle(params, nil)
@@ -1481,7 +1481,7 @@ func (ws *WeaviateServer) Replicate(params opsreplication.ReplicateParams) (*ops
 		return nil, errors.New("replicationreplicate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/replication/replicate")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/replication/replicate")
 	}
 
 	responder := ws.api.ReplicationReplicateHandler.Handle(params, nil)
@@ -1502,7 +1502,7 @@ func (ws *WeaviateServer) ReplicationDetails(params opsreplication.ReplicationDe
 		return nil, errors.New("replicationreplicationdetails handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/replication/replicate/{id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/replication/replicate/{id}")
 	}
 
 	responder := ws.api.ReplicationReplicationDetailsHandler.Handle(params, nil)
@@ -1523,7 +1523,7 @@ func (ws *WeaviateServer) AliasesCreate(params opsschema.AliasesCreateParams) (*
 		return nil, errors.New("schemaaliasescreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/aliases")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/aliases")
 	}
 
 	responder := ws.api.SchemaAliasesCreateHandler.Handle(params, nil)
@@ -1544,7 +1544,7 @@ func (ws *WeaviateServer) AliasesDelete(params opsschema.AliasesDeleteParams) (*
 		return nil, errors.New("schemaaliasesdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/aliases/{aliasName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/aliases/{aliasName}")
 	}
 
 	responder := ws.api.SchemaAliasesDeleteHandler.Handle(params, nil)
@@ -1565,7 +1565,7 @@ func (ws *WeaviateServer) AliasesGet(params opsschema.AliasesGetParams) (*opssch
 		return nil, errors.New("schemaaliasesget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/aliases")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/aliases")
 	}
 
 	responder := ws.api.SchemaAliasesGetHandler.Handle(params, nil)
@@ -1586,7 +1586,7 @@ func (ws *WeaviateServer) AliasesGetAlias(params opsschema.AliasesGetAliasParams
 		return nil, errors.New("schemaaliasesgetalias handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/aliases/{aliasName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/aliases/{aliasName}")
 	}
 
 	responder := ws.api.SchemaAliasesGetAliasHandler.Handle(params, nil)
@@ -1607,7 +1607,7 @@ func (ws *WeaviateServer) AliasesUpdate(params opsschema.AliasesUpdateParams) (*
 		return nil, errors.New("schemaaliasesupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/aliases/{aliasName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/aliases/{aliasName}")
 	}
 
 	responder := ws.api.SchemaAliasesUpdateHandler.Handle(params, nil)
@@ -1628,7 +1628,7 @@ func (ws *WeaviateServer) SchemaDump(params opsschema.SchemaDumpParams) (*opssch
 		return nil, errors.New("schemaschemadump handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/schema")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/schema")
 	}
 
 	responder := ws.api.SchemaSchemaDumpHandler.Handle(params, nil)
@@ -1648,8 +1648,11 @@ func (ws *WeaviateServer) SchemaObjectsCreate(params opsschema.SchemaObjectsCrea
 	if ws.api.SchemaSchemaObjectsCreateHandler == nil {
 		return nil, errors.New("schemaschemaobjectscreate handler is not configured")
 	}
+	if params.ObjectClass != nil {
+		ws.applyConfiguredModuleConfig(params.ObjectClass)
+	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/schema")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/schema")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsCreateHandler.Handle(params, nil)
@@ -1670,7 +1673,7 @@ func (ws *WeaviateServer) SchemaObjectsDelete(params opsschema.SchemaObjectsDele
 		return nil, errors.New("schemaschemaobjectsdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/schema/{className}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/schema/{className}")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsDeleteHandler.Handle(params, nil)
@@ -1691,7 +1694,7 @@ func (ws *WeaviateServer) SchemaObjectsGet(params opsschema.SchemaObjectsGetPara
 		return nil, errors.New("schemaschemaobjectsget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/schema/{className}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/schema/{className}")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsGetHandler.Handle(params, nil)
@@ -1712,7 +1715,7 @@ func (ws *WeaviateServer) SchemaObjectsPropertiesAdd(params opsschema.SchemaObje
 		return nil, errors.New("schemaschemaobjectspropertiesadd handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/schema/{className}/properties")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/schema/{className}/properties")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsPropertiesAddHandler.Handle(params, nil)
@@ -1733,7 +1736,7 @@ func (ws *WeaviateServer) SchemaObjectsPropertiesDelete(params opsschema.SchemaO
 		return nil, errors.New("schemaschemaobjectspropertiesdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/schema/{className}/properties/{propertyName}/index/{indexName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/schema/{className}/properties/{propertyName}/index/{indexName}")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsPropertiesDeleteHandler.Handle(params, nil)
@@ -1754,7 +1757,7 @@ func (ws *WeaviateServer) SchemaObjectsShardsGet(params opsschema.SchemaObjectsS
 		return nil, errors.New("schemaschemaobjectsshardsget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/schema/{className}/shards")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/schema/{className}/shards")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsShardsGetHandler.Handle(params, nil)
@@ -1775,7 +1778,7 @@ func (ws *WeaviateServer) SchemaObjectsShardsUpdate(params opsschema.SchemaObjec
 		return nil, errors.New("schemaschemaobjectsshardsupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/schema/{className}/shards/{shardName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/schema/{className}/shards/{shardName}")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsShardsUpdateHandler.Handle(params, nil)
@@ -1796,7 +1799,7 @@ func (ws *WeaviateServer) SchemaObjectsUpdate(params opsschema.SchemaObjectsUpda
 		return nil, errors.New("schemaschemaobjectsupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/schema/{className}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/schema/{className}")
 	}
 
 	responder := ws.api.SchemaSchemaObjectsUpdateHandler.Handle(params, nil)
@@ -1817,7 +1820,7 @@ func (ws *WeaviateServer) TenantExists(params opsschema.TenantExistsParams) (*op
 		return nil, errors.New("schematenantexists handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "HEAD", "/v1/schema/{className}/tenants/{tenantName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "HEAD", "/v1/schema/{className}/tenants/{tenantName}")
 	}
 
 	responder := ws.api.SchemaTenantExistsHandler.Handle(params, nil)
@@ -1838,7 +1841,7 @@ func (ws *WeaviateServer) TenantsCreate(params opsschema.TenantsCreateParams) (*
 		return nil, errors.New("schematenantscreate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/schema/{className}/tenants")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/schema/{className}/tenants")
 	}
 
 	responder := ws.api.SchemaTenantsCreateHandler.Handle(params, nil)
@@ -1859,7 +1862,7 @@ func (ws *WeaviateServer) TenantsDelete(params opsschema.TenantsDeleteParams) (*
 		return nil, errors.New("schematenantsdelete handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/schema/{className}/tenants")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/schema/{className}/tenants")
 	}
 
 	responder := ws.api.SchemaTenantsDeleteHandler.Handle(params, nil)
@@ -1880,7 +1883,7 @@ func (ws *WeaviateServer) TenantsGet(params opsschema.TenantsGetParams) (*opssch
 		return nil, errors.New("schematenantsget handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/schema/{className}/tenants")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/schema/{className}/tenants")
 	}
 
 	responder := ws.api.SchemaTenantsGetHandler.Handle(params, nil)
@@ -1901,7 +1904,7 @@ func (ws *WeaviateServer) TenantsGetOne(params opsschema.TenantsGetOneParams) (*
 		return nil, errors.New("schematenantsgetone handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/schema/{className}/tenants/{tenantName}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/schema/{className}/tenants/{tenantName}")
 	}
 
 	responder := ws.api.SchemaTenantsGetOneHandler.Handle(params, nil)
@@ -1922,7 +1925,7 @@ func (ws *WeaviateServer) TenantsUpdate(params opsschema.TenantsUpdateParams) (*
 		return nil, errors.New("schematenantsupdate handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "PUT", "/v1/schema/{className}/tenants")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "PUT", "/v1/schema/{className}/tenants")
 	}
 
 	responder := ws.api.SchemaTenantsUpdateHandler.Handle(params, nil)
@@ -1943,7 +1946,7 @@ func (ws *WeaviateServer) ActivateUser(params opsusers.ActivateUserParams) (*ops
 		return nil, errors.New("usersactivateuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/activate")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/activate")
 	}
 
 	responder := ws.api.UsersActivateUserHandler.Handle(params, nil)
@@ -1964,7 +1967,7 @@ func (ws *WeaviateServer) CreateUser(params opsusers.CreateUserParams) (*opsuser
 		return nil, errors.New("userscreateuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}")
 	}
 
 	responder := ws.api.UsersCreateUserHandler.Handle(params, nil)
@@ -1985,7 +1988,7 @@ func (ws *WeaviateServer) DeactivateUser(params opsusers.DeactivateUserParams) (
 		return nil, errors.New("usersdeactivateuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/deactivate")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/deactivate")
 	}
 
 	responder := ws.api.UsersDeactivateUserHandler.Handle(params, nil)
@@ -2006,7 +2009,7 @@ func (ws *WeaviateServer) DeleteUser(params opsusers.DeleteUserParams) (*opsuser
 		return nil, errors.New("usersdeleteuser handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "DELETE", "/v1/users/db/{user_id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "DELETE", "/v1/users/db/{user_id}")
 	}
 
 	responder := ws.api.UsersDeleteUserHandler.Handle(params, nil)
@@ -2027,7 +2030,7 @@ func (ws *WeaviateServer) GetOwnInfo(params opsusers.GetOwnInfoParams) (*opsuser
 		return nil, errors.New("usersgetowninfo handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/users/own-info")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/users/own-info")
 	}
 
 	responder := ws.api.UsersGetOwnInfoHandler.Handle(params, nil)
@@ -2048,7 +2051,7 @@ func (ws *WeaviateServer) GetUserInfo(params opsusers.GetUserInfoParams) (*opsus
 		return nil, errors.New("usersgetuserinfo handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/users/db/{user_id}")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/users/db/{user_id}")
 	}
 
 	responder := ws.api.UsersGetUserInfoHandler.Handle(params, nil)
@@ -2069,7 +2072,7 @@ func (ws *WeaviateServer) ListAllUsers(params opsusers.ListAllUsersParams) (*ops
 		return nil, errors.New("userslistallusers handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/users/db")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/users/db")
 	}
 
 	responder := ws.api.UsersListAllUsersHandler.Handle(params, nil)
@@ -2090,7 +2093,7 @@ func (ws *WeaviateServer) RotateUserAPIKey(params opsusers.RotateUserAPIKeyParam
 		return nil, errors.New("usersrotateuserapikey handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/rotate-key")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "POST", "/v1/users/db/{user_id}/rotate-key")
 	}
 
 	responder := ws.api.UsersRotateUserAPIKeyHandler.Handle(params, nil)
@@ -2111,7 +2114,7 @@ func (ws *WeaviateServer) GetWellKnownOpenidConfiguration(params opswell_known.G
 		return nil, errors.New("wellknowngetwellknownopenidconfiguration handler is not configured")
 	}
 	if params.HTTPRequest == nil {
-		params.HTTPRequest = newInProcessRequest(nil, "GET", "/v1/.well-known/openid-configuration")
+		params.HTTPRequest = ws.newInProcessRequest(nil, "GET", "/v1/.well-known/openid-configuration")
 	}
 
 	responder := ws.api.WellKnownGetWellKnownOpenidConfigurationHandler.Handle(params, nil)
