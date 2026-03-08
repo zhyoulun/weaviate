@@ -17,8 +17,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-openapi/loads"
 	flags "github.com/jessevdk/go-flags"
@@ -35,6 +37,8 @@ type WeaviateServer struct {
 	api    *operations.WeaviateAPI
 	cfg    Config
 }
+
+var embeddedEnvMu sync.Mutex
 
 // LogConfig controls startup logger behavior for the embedded server.
 type LogConfig struct {
@@ -63,6 +67,12 @@ func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, err
 // NewWeaviateServerWithConfig 使用聚合 Config 初始化可嵌入的 Weaviate 服务实例。
 func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
 	serverConfig := cfg.WeaviateConfig
+
+	restoreEnv, err := applyEmbeddedEnvOverrides(serverConfig)
+	if err != nil {
+		return nil, fmt.Errorf("prepare embedded env overrides: %w", err)
+	}
+	defer restoreEnv()
 
 	// 加载编译进二进制的 swagger 规范。
 	swaggerSpec, err := loads.Embedded(rest.SwaggerJSON, rest.FlatSwaggerJSON)
@@ -142,6 +152,196 @@ func configureServerListener(server *rest.Server, serverConfig config.WeaviateCo
 	default:
 		server.Host = host
 		server.Port = port
+	}
+}
+
+type envVarState struct {
+	value  string
+	exists bool
+}
+
+type portAllocator func(usedPorts map[int]struct{}) (int, error)
+
+func applyEmbeddedEnvOverrides(serverConfig config.WeaviateConfig) (func(), error) {
+	embeddedEnvMu.Lock()
+
+	overrides := map[string]string{}
+	usedPorts := map[int]struct{}{}
+
+	setStringOverride(overrides, "CLUSTER_HOSTNAME", strings.TrimSpace(serverConfig.Config.Cluster.Hostname))
+	setStringOverride(overrides, "CLUSTER_JOIN", strings.TrimSpace(serverConfig.Config.Cluster.Join))
+	setStringOverride(overrides, "CLUSTER_BIND_ADDR", strings.TrimSpace(serverConfig.Config.Cluster.BindAddr))
+	setStringOverride(overrides, "CLUSTER_ADVERTISE_ADDR", strings.TrimSpace(serverConfig.Config.Cluster.AdvertiseAddr))
+
+	if serverConfig.Config.Cluster.Localhost {
+		overrides["CLUSTER_IN_LOCALHOST"] = "true"
+	} else if _, exists := os.LookupEnv("CLUSTER_IN_LOCALHOST"); !exists {
+		// Embedded mode should default to localhost-only networking.
+		overrides["CLUSTER_IN_LOCALHOST"] = "true"
+	}
+
+	if serverConfig.Config.Cluster.EmbeddedNoNetwork {
+		overrides["WEAVIATE_EMBEDDED_NO_NETWORK"] = "true"
+	} else if _, exists := os.LookupEnv("WEAVIATE_EMBEDDED_NO_NETWORK"); !exists {
+		// Embedded server defaults to in-process mode without network listeners.
+		overrides["WEAVIATE_EMBEDDED_NO_NETWORK"] = "true"
+	}
+
+	if serverConfig.Config.Cluster.AdvertisePort > 0 {
+		overrides["CLUSTER_ADVERTISE_PORT"] = strconv.Itoa(serverConfig.Config.Cluster.AdvertisePort)
+		usedPorts[serverConfig.Config.Cluster.AdvertisePort] = struct{}{}
+	}
+
+	if err := setPortOverride(overrides, usedPorts, "CLUSTER_GOSSIP_BIND_PORT",
+		serverConfig.Config.Cluster.GossipBindPort, reserveTCPAndUDPPort); err != nil {
+		embeddedEnvMu.Unlock()
+		return nil, err
+	}
+
+	if err := setPortOverride(overrides, usedPorts, "CLUSTER_DATA_BIND_PORT",
+		serverConfig.Config.Cluster.DataBindPort, reserveTCPPort); err != nil {
+		embeddedEnvMu.Unlock()
+		return nil, err
+	}
+
+	if err := setPortOverride(overrides, usedPorts, "RAFT_PORT",
+		serverConfig.Config.Raft.Port, reserveTCPPort); err != nil {
+		embeddedEnvMu.Unlock()
+		return nil, err
+	}
+
+	if err := setPortOverride(overrides, usedPorts, "RAFT_INTERNAL_RPC_PORT",
+		serverConfig.Config.Raft.InternalRPCPort, reserveTCPPort); err != nil {
+		embeddedEnvMu.Unlock()
+		return nil, err
+	}
+
+	if len(serverConfig.Config.Raft.Join) > 0 {
+		overrides["RAFT_JOIN"] = strings.Join(serverConfig.Config.Raft.Join, ",")
+	}
+
+	if err := setPortOverride(overrides, usedPorts, "GRPC_PORT",
+		serverConfig.Config.GRPC.Port, reserveTCPPort); err != nil {
+		embeddedEnvMu.Unlock()
+		return nil, err
+	}
+
+	switch {
+	case serverConfig.Config.Profiling.Disabled:
+		overrides["GO_PROFILING_DISABLE"] = "true"
+	case serverConfig.Config.Profiling.Port > 0:
+		overrides["GO_PROFILING_DISABLE"] = "false"
+		overrides["GO_PROFILING_PORT"] = strconv.Itoa(serverConfig.Config.Profiling.Port)
+	default:
+		_, disableSet := os.LookupEnv("GO_PROFILING_DISABLE")
+		_, portSet := os.LookupEnv("GO_PROFILING_PORT")
+		if !disableSet && !portSet {
+			// Avoid exposing default pprof (6060) in embedded mode.
+			overrides["GO_PROFILING_DISABLE"] = "true"
+		}
+	}
+
+	originals := make(map[string]envVarState, len(overrides))
+	for key, value := range overrides {
+		originalValue, exists := os.LookupEnv(key)
+		originals[key] = envVarState{value: originalValue, exists: exists}
+		if err := os.Setenv(key, value); err != nil {
+			restoreEnvironment(originals)
+			embeddedEnvMu.Unlock()
+			return nil, fmt.Errorf("set %s: %w", key, err)
+		}
+	}
+
+	return func() {
+		restoreEnvironment(originals)
+		embeddedEnvMu.Unlock()
+	}, nil
+}
+
+func setStringOverride(overrides map[string]string, key, value string) {
+	if value == "" {
+		return
+	}
+	overrides[key] = value
+}
+
+func setPortOverride(overrides map[string]string, usedPorts map[int]struct{}, envName string,
+	configPort int, allocator portAllocator,
+) error {
+	if configPort > 0 {
+		overrides[envName] = strconv.Itoa(configPort)
+		usedPorts[configPort] = struct{}{}
+		return nil
+	}
+
+	if existing, exists := os.LookupEnv(envName); exists {
+		if parsed, err := strconv.Atoi(existing); err == nil && parsed > 0 {
+			usedPorts[parsed] = struct{}{}
+		}
+		return nil
+	}
+
+	port, err := allocator(usedPorts)
+	if err != nil {
+		return fmt.Errorf("allocate %s: %w", envName, err)
+	}
+	overrides[envName] = strconv.Itoa(port)
+	usedPorts[port] = struct{}{}
+	return nil
+}
+
+func reserveTCPAndUDPPort(usedPorts map[int]struct{}) (int, error) {
+	for i := 0; i < 128; i++ {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return 0, err
+		}
+
+		port := listener.Addr().(*net.TCPAddr).Port
+		if _, alreadyUsed := usedPorts[port]; alreadyUsed {
+			listener.Close()
+			continue
+		}
+
+		packetConn, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			listener.Close()
+			continue
+		}
+
+		packetConn.Close()
+		listener.Close()
+		return port, nil
+	}
+
+	return 0, fmt.Errorf("unable to allocate shared tcp/udp port")
+}
+
+func reserveTCPPort(usedPorts map[int]struct{}) (int, error) {
+	for i := 0; i < 128; i++ {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return 0, err
+		}
+
+		port := listener.Addr().(*net.TCPAddr).Port
+		listener.Close()
+		if _, alreadyUsed := usedPorts[port]; alreadyUsed {
+			continue
+		}
+		return port, nil
+	}
+
+	return 0, fmt.Errorf("unable to allocate tcp port")
+}
+
+func restoreEnvironment(originals map[string]envVarState) {
+	for key, state := range originals {
+		if state.exists {
+			_ = os.Setenv(key, state.value)
+			continue
+		}
+		_ = os.Unsetenv(key)
 	}
 }
 

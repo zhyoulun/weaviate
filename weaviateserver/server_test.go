@@ -3,6 +3,8 @@ package weaviateserver
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	opsobjects "github.com/weaviate/weaviate/adapters/handlers/rest/operations/objects"
 	opsschema "github.com/weaviate/weaviate/adapters/handlers/rest/operations/schema"
 	"github.com/weaviate/weaviate/entities/models"
+	clustercfg "github.com/weaviate/weaviate/usecases/cluster"
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
@@ -245,4 +248,124 @@ func TestNewInProcessRequestKeepsExplicitOpenAIAPIKey(t *testing.T) {
 	if key[0] != "explicit-key" {
 		t.Fatalf("explicit X-Openai-Api-Key should win, got=%q", key[0])
 	}
+}
+
+func TestApplyEmbeddedEnvOverridesDefaults(t *testing.T) {
+	portKeys := []string{
+		"CLUSTER_GOSSIP_BIND_PORT",
+		"CLUSTER_DATA_BIND_PORT",
+		"RAFT_PORT",
+		"RAFT_INTERNAL_RPC_PORT",
+		"GRPC_PORT",
+	}
+	allKeys := append([]string{
+		"CLUSTER_IN_LOCALHOST",
+		"WEAVIATE_EMBEDDED_NO_NETWORK",
+		"GO_PROFILING_DISABLE",
+		"GO_PROFILING_PORT",
+	}, portKeys...)
+
+	saved := snapshotAndUnsetEnv(t, allKeys...)
+	defer restoreEnvironment(saved)
+
+	restore, err := applyEmbeddedEnvOverrides(config.WeaviateConfig{})
+	if err != nil {
+		t.Fatalf("applyEmbeddedEnvOverrides: %v", err)
+	}
+	defer restore()
+
+	seenPorts := map[int]struct{}{}
+	for _, key := range portKeys {
+		raw := os.Getenv(key)
+		port, convErr := strconv.Atoi(raw)
+		if convErr != nil || port <= 0 {
+			t.Fatalf("%s must be a positive integer, got=%q err=%v", key, raw, convErr)
+		}
+		if _, exists := seenPorts[port]; exists {
+			t.Fatalf("duplicate port allocated: %d", port)
+		}
+		seenPorts[port] = struct{}{}
+	}
+
+	if got := os.Getenv("CLUSTER_IN_LOCALHOST"); got != "true" {
+		t.Fatalf("CLUSTER_IN_LOCALHOST should default to true, got=%q", got)
+	}
+	if got := os.Getenv("WEAVIATE_EMBEDDED_NO_NETWORK"); got != "true" {
+		t.Fatalf("WEAVIATE_EMBEDDED_NO_NETWORK should default to true, got=%q", got)
+	}
+
+	if got := os.Getenv("GO_PROFILING_DISABLE"); got != "true" {
+		t.Fatalf("GO_PROFILING_DISABLE should default to true, got=%q", got)
+	}
+}
+
+func TestApplyEmbeddedEnvOverridesHonorsExplicitConfig(t *testing.T) {
+	saved := snapshotAndUnsetEnv(t,
+		"CLUSTER_GOSSIP_BIND_PORT",
+		"CLUSTER_DATA_BIND_PORT",
+		"RAFT_PORT",
+		"RAFT_INTERNAL_RPC_PORT",
+		"GRPC_PORT",
+		"WEAVIATE_EMBEDDED_NO_NETWORK",
+		"GO_PROFILING_DISABLE",
+		"GO_PROFILING_PORT",
+	)
+	defer restoreEnvironment(saved)
+
+	cfg := config.WeaviateConfig{
+		Config: config.Config{
+			Cluster: clustercfg.Config{
+				GossipBindPort: 19446,
+				DataBindPort:   19447,
+				Localhost:      true,
+			},
+			Raft: config.Raft{
+				Port:            18300,
+				InternalRPCPort: 18301,
+			},
+			GRPC: config.GRPC{
+				Port: 15051,
+			},
+			Profiling: config.Profiling{
+				Disabled: true,
+			},
+		},
+	}
+
+	restore, err := applyEmbeddedEnvOverrides(cfg)
+	if err != nil {
+		t.Fatalf("applyEmbeddedEnvOverrides: %v", err)
+	}
+	defer restore()
+
+	expectEnv := map[string]string{
+		"CLUSTER_GOSSIP_BIND_PORT":     "19446",
+		"CLUSTER_DATA_BIND_PORT":       "19447",
+		"RAFT_PORT":                    "18300",
+		"RAFT_INTERNAL_RPC_PORT":       "18301",
+		"GRPC_PORT":                    "15051",
+		"WEAVIATE_EMBEDDED_NO_NETWORK": "true",
+		"GO_PROFILING_DISABLE":         "true",
+		"CLUSTER_IN_LOCALHOST":         "true",
+	}
+
+	for key, expected := range expectEnv {
+		if got := os.Getenv(key); got != expected {
+			t.Fatalf("%s mismatch, got=%q want=%q", key, got, expected)
+		}
+	}
+}
+
+func snapshotAndUnsetEnv(t *testing.T, keys ...string) map[string]envVarState {
+	t.Helper()
+
+	saved := make(map[string]envVarState, len(keys))
+	for _, key := range keys {
+		value, exists := os.LookupEnv(key)
+		saved[key] = envVarState{value: value, exists: exists}
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+	}
+	return saved
 }

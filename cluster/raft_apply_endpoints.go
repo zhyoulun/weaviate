@@ -321,6 +321,12 @@ func (s *Raft) Execute(ctx context.Context, req *cmd.ApplyRequest) (uint64, erro
 			return backoff.Permanent(err)
 		}
 
+		if s.store.cfg.EmbeddedNoNetwork {
+			err = s.leaderErr()
+			s.log.Warnf("apply: waiting for local leader in no-network mode: %s", err)
+			return err
+		}
+
 		leader := s.store.Leader()
 		if leader == "" {
 			err = s.leaderErr()

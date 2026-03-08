@@ -1543,6 +1543,7 @@ func parseClusterConfig() (cluster.Config, error) {
 		cfg.Hostname, _ = os.Hostname()
 	}
 	cfg.Join = os.Getenv("CLUSTER_JOIN")
+	cfg.EmbeddedNoNetwork = entcfg.Enabled(os.Getenv("WEAVIATE_EMBEDDED_NO_NETWORK"))
 
 	advertiseAddr, advertiseAddrSet := os.LookupEnv("CLUSTER_ADVERTISE_ADDR")
 	if advertiseAddrSet {

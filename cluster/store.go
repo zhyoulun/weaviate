@@ -78,6 +78,8 @@ type Config struct {
 	RaftPort int
 	// RPCPort is used by weaviate internal gRPC communication
 	RPCPort int
+	// EmbeddedNoNetwork disables network listeners and uses in-memory raft transport.
+	EmbeddedNoNetwork bool
 	// RaftRPCMessageMaxSize is the maximum message sized allowed on the internal RPC communication
 	// TODO: Remove Raft prefix to avoid confusion between RAFT and RPC.
 	RaftRPCMessageMaxSize int
@@ -205,7 +207,7 @@ type Store struct {
 	// raft implementation from external library
 	raft          *raft.Raft
 	raftResolver  types.RaftResolver
-	raftTransport *raft.NetworkTransport
+	raftTransport raft.Transport
 
 	// applyTimeout timeout limit the amount of time raft waits for a command to be applied
 	applyTimeout time.Duration
@@ -440,6 +442,18 @@ func (st *Store) init() error {
 		return fmt.Errorf("file snapshot store: %w", err)
 	}
 
+	if st.cfg.EmbeddedNoNetwork {
+		inmemAddress := raft.ServerAddress(fmt.Sprintf("%s:%d", st.cfg.Host, st.cfg.RaftPort))
+		_, inmemTransport := raft.NewInmemTransport(inmemAddress)
+		st.raftTransport = inmemTransport
+		st.log.WithFields(logrus.Fields{
+			"action":     "raft_inmem_transport",
+			"raft_addr":  inmemTransport.LocalAddr(),
+			"no_network": true,
+		}).Info("in-memory raft transport enabled")
+		return nil
+	}
+
 	// tcp transport
 	advertiseAddress := fmt.Sprintf("%s:%d", st.cfg.Host, st.cfg.RaftPort)
 	tcpAddr, err := net.ResolveTCPAddr("tcp", advertiseAddress)
@@ -541,8 +555,12 @@ func (st *Store) Close(ctx context.Context) error {
 	// close transport to stop accepting new connections
 	// this prevents "transport shutdown" errors during raft shutdown
 	st.log.Info("closing raft transport ...")
-	if err := st.raftTransport.Close(); err != nil {
-		st.log.WithError(err).Warn("failed to close raft transport")
+	if st.raftTransport != nil {
+		if closer, ok := st.raftTransport.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				st.log.WithError(err).Warn("failed to close raft transport")
+			}
+		}
 	}
 
 	// shutdown raft after transport is closed to ensure clean termination

@@ -77,6 +77,9 @@ func (s *Raft) Join(ctx context.Context, id, addr string, voter bool) error {
 	if s.store.IsLeader() {
 		return s.store.Join(id, addr, voter)
 	}
+	if s.store.cfg.EmbeddedNoNetwork {
+		return s.leaderErr()
+	}
 	leader := s.store.Leader()
 	if leader == "" {
 		return s.leaderErr()
@@ -93,6 +96,9 @@ func (s *Raft) Remove(ctx context.Context, id string) error {
 	if s.store.IsLeader() {
 		err = s.store.Remove(id)
 	} else {
+		if s.store.cfg.EmbeddedNoNetwork {
+			return s.leaderErr()
+		}
 		leader := s.store.Leader()
 		if leader == "" {
 			return s.leaderErr()

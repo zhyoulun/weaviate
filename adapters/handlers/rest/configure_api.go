@@ -285,12 +285,14 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 		}
 
 		// only monitoring tool supported at the moment is prometheus
-		enterrors.GoWrapper(func() {
-			mux := http.NewServeMux()
-			mux.Handle("/metrics", promhttp.Handler())
-			mux.Handle("/tenant-activity", appState.TenantActivity)
-			http.ListenAndServe(fmt.Sprintf(":%d", appState.ServerConfig.Config.Monitoring.Port), mux)
-		}, appState.Logger)
+		if !appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork {
+			enterrors.GoWrapper(func() {
+				mux := http.NewServeMux()
+				mux.Handle("/metrics", promhttp.Handler())
+				mux.Handle("/tenant-activity", appState.TenantActivity)
+				http.ListenAndServe(fmt.Sprintf(":%d", appState.ServerConfig.Config.Monitoring.Port), mux)
+			}, appState.Logger)
+		}
 	}
 
 	if appState.ServerConfig.Config.Sentry.Enabled {
@@ -585,6 +587,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 		BindAddr:                        appState.Cluster.LocalBindAddr(),
 		RaftPort:                        appState.ServerConfig.Config.Raft.Port,
 		RPCPort:                         appState.ServerConfig.Config.Raft.InternalRPCPort,
+		EmbeddedNoNetwork:               appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork,
 		RaftRPCMessageMaxSize:           appState.ServerConfig.Config.Raft.RPCMessageMaxSize,
 		BootstrapTimeout:                appState.ServerConfig.Config.Raft.BootstrapTimeout,
 		BootstrapExpect:                 appState.ServerConfig.Config.Raft.BootstrapExpect,
@@ -680,8 +683,10 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 	// Create export participant early so the cluster API server can register it
 	appState.ExportParticipant = exportUsecase.NewParticipant(serverShutdownCtx, appState.DB, appState.Modules, appState.Logger)
 
-	appState.InternalServer = clusterapi.NewServer(appState)
-	enterrors.GoWrapper(func() { appState.InternalServer.Serve() }, appState.Logger)
+	if !appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork {
+		appState.InternalServer = clusterapi.NewServer(appState)
+		enterrors.GoWrapper(func() { appState.InternalServer.Serve() }, appState.Logger)
+	}
 
 	vectorRepo.SetSchemaGetter(schemaManager)
 	explorer.SetSchemaGetter(schemaManager)
@@ -989,7 +994,11 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		grpcInstrument = monitoring.InstrumentGrpc(appState.GRPCServerMetrics)
 	}
 
-	grpcServer, batchDrain := createGrpcServer(appState, grpcInstrument...)
+	var grpcServer *grpc.Server
+	batchDrain := func() {}
+	if !appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork {
+		grpcServer, batchDrain = createGrpcServer(appState, grpcInstrument...)
+	}
 
 	telemeter := telemetry.New(
 		appState.DB,
@@ -1061,7 +1070,9 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		appState.GRPCConnManager.Close()
 
 		// gracefully stop gRPC server
-		grpcServer.GracefulStop()
+		if grpcServer != nil {
+			grpcServer.GracefulStop()
+		}
 
 		if appState.ServerConfig.Config.Sentry.Enabled {
 			sentry.Flush(2 * time.Second)
@@ -1070,11 +1081,13 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		if err := appState.InternalServer.Close(ctx); err != nil {
-			appState.Logger.
-				WithError(err).
-				WithField("action", "shutdown internal server").
-				Errorf("failed to gracefully shutdown")
+		if appState.InternalServer != nil {
+			if err := appState.InternalServer.Close(ctx); err != nil {
+				appState.Logger.
+					WithError(err).
+					WithField("action", "shutdown internal server").
+					Errorf("failed to gracefully shutdown")
+			}
 		}
 
 		if err := appState.ClusterService.Close(ctx); err != nil {
@@ -1099,7 +1112,9 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		}
 	}
 
-	startGrpcServer(grpcServer, appState)
+	if grpcServer != nil {
+		startGrpcServer(grpcServer, appState)
+	}
 
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
 }

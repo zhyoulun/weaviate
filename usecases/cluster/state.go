@@ -108,6 +108,8 @@ type Config struct {
 	RaftBootstrapExpect int
 	// RequestQueueConfig is used to configure the request queue buffer for the replicated indices
 	RequestQueueConfig RequestQueueConfig `json:"requestQueueConfig" yaml:"requestQueueConfig"`
+	// EmbeddedNoNetwork disables memberlist networking and keeps node state local-only.
+	EmbeddedNoNetwork bool `json:"embeddedNoNetwork" yaml:"embeddedNoNetwork"`
 }
 
 type AuthConfig struct {
@@ -154,6 +156,37 @@ func Init(userConfig Config, raftTimeoutsMultiplier int, dataPath string, nonSto
 		return nil, errors.Wrap(err, "validate cluster config")
 	}
 
+	state := State{
+		config:          userConfig,
+		nonStorageNodes: nonStorageNodes,
+		delegate: delegate{
+			Name:     userConfig.Hostname,
+			dataPath: dataPath,
+			log:      logger,
+			metadata: NodeMetadata{
+				RestPort: userConfig.DataBindPort,
+				GrpcPort: userConfig.DataBindPort,
+			},
+		},
+	}
+
+	// Initialize delegate
+	if err := state.delegate.init(diskSpace); err != nil {
+		logger.WithField("action", "init_state.delegate_init").Errorf("delegate init failed: %v", err)
+		return nil, errors.Wrap(err, "delegate init")
+	}
+
+	if userConfig.EmbeddedNoNetwork {
+		logger.WithFields(logrus.Fields{
+			"action":            "memberlist_config",
+			"hostname":          userConfig.Hostname,
+			"embedded_no_net":   true,
+			"gossip_bind_port":  userConfig.GossipBindPort,
+			"cluster_data_port": userConfig.DataBindPort,
+		}).Info("memberlist networking disabled in embedded mode")
+		return &state, nil
+	}
+
 	// Select appropriate memberlist configuration
 	cfg := selectMemberlistConfig(userConfig)
 
@@ -173,26 +206,7 @@ func Init(userConfig Config, raftTimeoutsMultiplier int, dataPath string, nonSto
 	// Configure additional settings
 	configureMemberlistSettings(cfg, userConfig, raftTimeoutsMultiplier)
 
-	// Create state
-	state := State{
-		config:          userConfig,
-		nonStorageNodes: nonStorageNodes,
-		delegate: delegate{
-			Name:     cfg.Name,
-			dataPath: dataPath,
-			log:      logger,
-			metadata: NodeMetadata{
-				RestPort: userConfig.DataBindPort,
-				GrpcPort: userConfig.DataBindPort,
-			},
-		},
-	}
-
-	// Initialize delegate
-	if err := state.delegate.init(diskSpace); err != nil {
-		logger.WithField("action", "init_state.delegate_init").Errorf("delegate init failed: %v", err)
-		return nil, errors.Wrap(err, "delegate init")
-	}
+	state.delegate.Name = cfg.Name
 
 	// Set delegate and events
 	cfg.Delegate = &state.delegate
@@ -256,6 +270,10 @@ func Init(userConfig Config, raftTimeoutsMultiplier int, dataPath string, nonSto
 // Hostnames for all live members, except self. Use AllHostnames to include
 // self, prefixes the data port.
 func (s *State) Hostnames() []string {
+	if s.list == nil {
+		return []string{}
+	}
+
 	mem := s.list.Members()
 	out := make([]string, len(mem))
 
@@ -302,7 +320,8 @@ func (s *State) dataPort(m *memberlist.Node) int {
 // AllHostnames for live members, including self.
 func (s *State) AllHostnames() []string {
 	if s.list == nil {
-		return []string{}
+		local := fmt.Sprintf("%s:%d", s.LocalAddr(), s.config.DataBindPort)
+		return []string{local}
 	}
 
 	mem := s.list.Members()
@@ -318,7 +337,7 @@ func (s *State) AllHostnames() []string {
 // All node names (not their hostnames!) for live members, including self.
 func (s *State) AllNames() []string {
 	if s.list == nil {
-		return []string{}
+		return []string{s.config.Hostname}
 	}
 	mem := s.list.Members()
 	out := make([]string, len(mem))
@@ -332,6 +351,10 @@ func (s *State) AllNames() []string {
 
 // StorageNodes returns all nodes except non storage nodes
 func (s *State) storageNodes() []string {
+	if s.list == nil {
+		return s.AllNames()
+	}
+
 	if len(s.nonStorageNodes) == 0 {
 		return s.AllNames()
 	}
@@ -375,6 +398,9 @@ func (s *State) SortCandidates(nodes []string) []string {
 
 // All node names (not their hostnames!) for live members, including self.
 func (s *State) NodeCount() int {
+	if s.list == nil {
+		return 1
+	}
 	return s.list.NumMembers()
 }
 
@@ -386,6 +412,12 @@ func (s *State) LocalName() string {
 // LocalAddr() returns local address
 func (s *State) LocalAddr() string {
 	if s.config.AdvertiseAddr == "" {
+		if s.list == nil {
+			if s.config.Hostname == "" {
+				return "127.0.0.1"
+			}
+			return s.config.Hostname
+		}
 		return s.list.LocalNode().Addr.String()
 	}
 
@@ -400,10 +432,20 @@ func (s *State) LocalBindAddr() string {
 }
 
 func (s *State) ClusterHealthScore() int {
+	if s.list == nil {
+		return 0
+	}
 	return s.list.GetHealthScore()
 }
 
 func (s *State) NodeHostname(nodeName string) (string, bool) {
+	if s.list == nil {
+		if nodeName == s.config.Hostname {
+			return fmt.Sprintf("%s:%d", s.LocalAddr(), s.config.DataBindPort), true
+		}
+		return "", false
+	}
+
 	for _, mem := range s.list.Members() {
 		if mem.Name == nodeName {
 			return fmt.Sprintf("%s:%d", mem.Addr.String(), s.dataPort(mem)), true
@@ -448,7 +490,7 @@ func (s *State) AllOtherClusterMembers(port int) map[string]string {
 // Leave marks the node as leaving the cluster (still visible but shutting down)
 func (s *State) Leave() error {
 	if s.list == nil {
-		return fmt.Errorf("memberlist not initialized")
+		return nil
 	}
 
 	s.delegate.log.Info("marking node as gracefully leaving...")
@@ -464,13 +506,20 @@ func (s *State) Leave() error {
 // Shutdown called when leaves the cluster gracefully and shuts down the memberlist instance
 func (s *State) Shutdown() error {
 	if s.list == nil {
-		return fmt.Errorf("memberlist not initialized")
+		return nil
 	}
 
 	return s.list.Shutdown()
 }
 
 func (s *State) NodeGRPCPort(nodeID string) (int, error) {
+	if s.list == nil {
+		if nodeID == s.config.Hostname {
+			return s.config.DataBindPort, nil
+		}
+		return 0, fmt.Errorf("node not found: %s", nodeID)
+	}
+
 	for _, mem := range s.list.Members() {
 		if mem.Name == nodeID {
 			return s.dataPort(mem), nil

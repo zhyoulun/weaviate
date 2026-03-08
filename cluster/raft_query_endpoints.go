@@ -375,6 +375,27 @@ func (s *Raft) Query(ctx context.Context, req *cmd.QueryRequest) (*cmd.QueryResp
 		return s.store.Query(req)
 	}
 
+	if s.store.cfg.EmbeddedNoNetwork {
+		var localResp *cmd.QueryResponse
+		err := backoff.Retry(func() error {
+			if !s.store.IsLeader() {
+				return s.leaderErr()
+			}
+			var err error
+			localResp, err = s.store.Query(req)
+			if err != nil {
+				return backoff.Permanent(err)
+			}
+			return nil
+			// pass in the election timeout after applying multiplier
+		}, backoffConfig(ctx, s.store.raftConfig().ElectionTimeout))
+		if err != nil {
+			s.log.Warnf("query: failed to execute local query in no-network mode: %s", err)
+			return &cmd.QueryResponse{}, err
+		}
+		return localResp, nil
+	}
+
 	// find out who the leader is
 	var leader string
 	if err := backoff.Retry(func() error {

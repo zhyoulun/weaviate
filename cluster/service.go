@@ -150,8 +150,10 @@ func (c *Service) onFSMCaughtUp(ctx context.Context) {
 // bootstrap the Raft node, and restore the database state
 func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 	c.logger.WithField("servers", c.config.NodeNameToPortMap).Info("open cluster service")
-	if err := c.rpcServer.Open(); err != nil {
-		return fmt.Errorf("start rpc service: %w", err)
+	if !c.config.EmbeddedNoNetwork {
+		if err := c.rpcServer.Open(); err != nil {
+			return fmt.Errorf("start rpc service: %w", err)
+		}
 	}
 
 	if err := c.Raft.Open(ctx, db); err != nil {
@@ -164,37 +166,49 @@ func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 	}
 	c.log.WithField("hasState", hasState).Info("raft init")
 
-	// If we have a state in raft, we only want to re-join the nodes in raft_join list to ensure that we update the
-	// configuration with our current ip.
-	// If we have no state, we want to do the bootstrap procedure where we will try to join a cluster or notify other
-	// peers that we are ready to form a new cluster.
-	bootstrapCtx, bCancel := context.WithTimeout(ctx, c.config.BootstrapTimeout)
-	defer bCancel()
-	if hasState {
-		joiner := bootstrap.NewJoiner(c.rpcClient, c.config.NodeID, c.raftAddr, c.config.Voter)
-		err = backoff.Retry(func() error {
-			joinNodes := bootstrap.ResolveRemoteNodes(c.config.NodeSelector, c.config.NodeNameToPortMap)
-			_, err := joiner.Do(bootstrapCtx, c.logger, joinNodes)
-			return err
-		}, backoff.WithContext(backoff.NewConstantBackOff(1*time.Second), bootstrapCtx))
-		if err != nil {
-			return fmt.Errorf("could not join raft join list: %w. Weaviate detected this node to have state stored. If the DB is still loading up we will hit this timeout. You can try increasing/setting RAFT_BOOTSTRAP_TIMEOUT env variable to a higher value", err)
+	if c.config.EmbeddedNoNetwork {
+		if !hasState {
+			addr := c.raftAddr
+			if c.Raft != nil && c.Raft.store != nil && c.Raft.store.raftTransport != nil {
+				addr = string(c.Raft.store.raftTransport.LocalAddr())
+			}
+			if err := c.Raft.store.Notify(c.config.NodeID, addr); err != nil {
+				return fmt.Errorf("bootstrap single node without network: %w", err)
+			}
 		}
 	} else {
-		bs := bootstrap.NewBootstrapper(
-			c.rpcClient,
-			c.config.NodeID,
-			c.raftAddr,
-			c.config.Voter,
-			c.config.NodeSelector,
-			c.Raft.Ready,
-		)
-		if err := bs.Do(
-			bootstrapCtx,
-			c.config.NodeNameToPortMap,
-			c.logger,
-			c.closeBootstrapper); err != nil {
-			return fmt.Errorf("bootstrap: %w", err)
+		// If we have a state in raft, we only want to re-join the nodes in raft_join list to ensure that we update the
+		// configuration with our current ip.
+		// If we have no state, we want to do the bootstrap procedure where we will try to join a cluster or notify other
+		// peers that we are ready to form a new cluster.
+		bootstrapCtx, bCancel := context.WithTimeout(ctx, c.config.BootstrapTimeout)
+		defer bCancel()
+		if hasState {
+			joiner := bootstrap.NewJoiner(c.rpcClient, c.config.NodeID, c.raftAddr, c.config.Voter)
+			err = backoff.Retry(func() error {
+				joinNodes := bootstrap.ResolveRemoteNodes(c.config.NodeSelector, c.config.NodeNameToPortMap)
+				_, err := joiner.Do(bootstrapCtx, c.logger, joinNodes)
+				return err
+			}, backoff.WithContext(backoff.NewConstantBackOff(1*time.Second), bootstrapCtx))
+			if err != nil {
+				return fmt.Errorf("could not join raft join list: %w. Weaviate detected this node to have state stored. If the DB is still loading up we will hit this timeout. You can try increasing/setting RAFT_BOOTSTRAP_TIMEOUT env variable to a higher value", err)
+			}
+		} else {
+			bs := bootstrap.NewBootstrapper(
+				c.rpcClient,
+				c.config.NodeID,
+				c.raftAddr,
+				c.config.Voter,
+				c.config.NodeSelector,
+				c.Raft.Ready,
+			)
+			if err := bs.Do(
+				bootstrapCtx,
+				c.config.NodeNameToPortMap,
+				c.logger,
+				c.closeBootstrapper); err != nil {
+				return fmt.Errorf("bootstrap: %w", err)
+			}
 		}
 	}
 
