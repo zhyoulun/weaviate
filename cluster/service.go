@@ -30,6 +30,7 @@ import (
 	"github.com/weaviate/weaviate/cluster/rpc"
 	"github.com/weaviate/weaviate/cluster/schema"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
+	"github.com/weaviate/weaviate/entities/startuptrace"
 	"github.com/weaviate/weaviate/usecases/auth/authorization"
 	"github.com/weaviate/weaviate/usecases/monitoring"
 )
@@ -149,22 +150,26 @@ func (c *Service) onFSMCaughtUp(ctx context.Context) {
 // Open internal RPC service to handle node communication,
 // bootstrap the Raft node, and restore the database state
 func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
+	startuptrace.Reset("cluster.service.open", "start")
 	c.logger.WithField("servers", c.config.NodeNameToPortMap).Info("open cluster service")
 	if !c.config.EmbeddedNoNetwork {
 		if err := c.rpcServer.Open(); err != nil {
 			return fmt.Errorf("start rpc service: %w", err)
 		}
 	}
+	startuptrace.Mark("cluster.service.open", "rpc_ready")
 
 	if err := c.Raft.Open(ctx, db); err != nil {
 		return fmt.Errorf("open raft store: %w", err)
 	}
+	startuptrace.Mark("cluster.service.open", "raft_open_done")
 
 	hasState, err := raft.HasExistingState(c.Raft.store.logCache, c.Raft.store.logStore, c.Raft.store.snapshotStore)
 	if err != nil {
 		return err
 	}
 	c.log.WithField("hasState", hasState).Info("raft init")
+	startuptrace.Mark("cluster.service.open", "existing_state_checked")
 
 	if c.config.EmbeddedNoNetwork {
 		if !hasState {
@@ -211,14 +216,17 @@ func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 			}
 		}
 	}
+	startuptrace.Mark("cluster.service.open", "membership_ready")
 
 	if err := c.WaitUntilDBRestored(ctx, 10*time.Second, c.closeWaitForDB); err != nil {
 		return fmt.Errorf("restore database: %w", err)
 	}
+	startuptrace.Mark("cluster.service.open", "db_restored")
 
 	enterrors.GoWrapper(func() {
 		c.onFSMCaughtUp(ctx)
 	}, c.logger)
+	startuptrace.Mark("cluster.service.open", "complete")
 	return nil
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/weaviate/weaviate/adapters/handlers/rest"
 	"github.com/weaviate/weaviate/adapters/handlers/rest/operations"
 	"github.com/weaviate/weaviate/entities/models"
+	"github.com/weaviate/weaviate/entities/startuptrace"
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
@@ -66,6 +67,8 @@ func NewWeaviateServer(serverConfig config.WeaviateConfig) (*WeaviateServer, err
 
 // NewWeaviateServerWithConfig 使用聚合 Config 初始化可嵌入的 Weaviate 服务实例。
 func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
+	startuptrace.Reset("weaviateserver", "start")
+
 	serverConfig := cfg.WeaviateConfig
 
 	restoreEnv, err := applyEmbeddedEnvOverrides(serverConfig)
@@ -73,18 +76,21 @@ func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
 		return nil, fmt.Errorf("prepare embedded env overrides: %w", err)
 	}
 	defer restoreEnv()
+	startuptrace.Mark("weaviateserver", "embedded_env_ready")
 
 	// 加载编译进二进制的 swagger 规范。
 	swaggerSpec, err := loads.Embedded(rest.SwaggerJSON, rest.FlatSwaggerJSON)
 	if err != nil {
 		return nil, fmt.Errorf("load embedded swagger spec: %w", err)
 	}
+	startuptrace.Mark("weaviateserver", "swagger_loaded")
 
 	// 根据 swagger 规范构建生成的 operations API。
 	api := operations.NewWeaviateAPI(swaggerSpec)
 
 	// 基于生成的 API 创建 REST Server。
 	server := rest.NewServer(api)
+	startuptrace.Mark("weaviateserver", "server_created")
 
 	// 配置 parser，并注册与 cmd/weaviate-server/main.go 一致的选项组。
 	parser := flags.NewParser(server, flags.Default)
@@ -101,14 +107,17 @@ func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
 			return nil, fmt.Errorf("add options group %q: %w", optsGroup.ShortDescription, err)
 		}
 	}
+	startuptrace.Mark("weaviateserver", "flags_configured")
 
 	// 解析空参数以应用默认 CLI 值，并保留与主程序一致的解析流程。
 	if _, err := parser.ParseArgs([]string{}); err != nil {
 		return nil, fmt.Errorf("parse weaviate server args: %w", err)
 	}
+	startuptrace.Mark("weaviateserver", "args_parsed")
 
 	// 在进程内配置监听参数，嵌入场景默认使用 HTTP。
 	configureServerListener(server, serverConfig)
+	startuptrace.Mark("weaviateserver", "listener_configured")
 
 	restoreLoggerConfig := rest.SetStartupLoggerConfig(rest.StartupLoggerConfig{
 		Level:      cfg.Log.Level,
@@ -117,9 +126,11 @@ func NewWeaviateServerWithConfig(cfg Config) (*WeaviateServer, error) {
 		DisableEnv: true,
 	})
 	defer restoreLoggerConfig()
+	startuptrace.Mark("weaviateserver", "startup_logger_configured")
 
 	// 完成 handler、app state、模块及运行时依赖的装配。
 	server.ConfigureAPI()
+	startuptrace.Mark("weaviateserver", "configure_api_done")
 
 	// 返回进程内服务包装对象。
 	return &WeaviateServer{server: server, api: api, cfg: cfg}, nil
@@ -180,11 +191,32 @@ func applyEmbeddedEnvOverrides(serverConfig config.WeaviateConfig) (func(), erro
 		overrides["CLUSTER_IN_LOCALHOST"] = "true"
 	}
 
+	embeddedNoNetwork := serverConfig.Config.Cluster.EmbeddedNoNetwork
 	if serverConfig.Config.Cluster.EmbeddedNoNetwork {
 		overrides["WEAVIATE_EMBEDDED_NO_NETWORK"] = "true"
 	} else if _, exists := os.LookupEnv("WEAVIATE_EMBEDDED_NO_NETWORK"); !exists {
 		// Embedded server defaults to in-process mode without network listeners.
 		overrides["WEAVIATE_EMBEDDED_NO_NETWORK"] = "true"
+		embeddedNoNetwork = true
+	}
+
+	if embeddedNoNetwork {
+		if serverConfig.Config.Raft.TimeoutsMultiplier.Get() > 0 {
+			overrides["RAFT_TIMEOUTS_MULTIPLIER"] = strconv.Itoa(serverConfig.Config.Raft.TimeoutsMultiplier.Get())
+		} else if _, exists := os.LookupEnv("RAFT_TIMEOUTS_MULTIPLIER"); !exists {
+			// Embedded single-node mode should converge quickly instead of inheriting the distributed default.
+			overrides["RAFT_TIMEOUTS_MULTIPLIER"] = "1"
+		}
+
+		if _, exists := os.LookupEnv("RAFT_HEARTBEAT_TIMEOUT"); !exists {
+			overrides["RAFT_HEARTBEAT_TIMEOUT"] = "1"
+		}
+		if _, exists := os.LookupEnv("RAFT_ELECTION_TIMEOUT"); !exists {
+			overrides["RAFT_ELECTION_TIMEOUT"] = "1"
+		}
+		if _, exists := os.LookupEnv("RAFT_LEADER_LEASE_TIMEOUT"); !exists {
+			overrides["RAFT_LEADER_LEASE_TIMEOUT"] = "0.5"
+		}
 	}
 
 	if serverConfig.Config.Cluster.AdvertisePort > 0 {

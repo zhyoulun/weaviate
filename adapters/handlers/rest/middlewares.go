@@ -88,10 +88,19 @@ func makeAddModuleHandlers(modules *modules.Provider) func(http.Handler) http.Ha
 }
 
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
-// So this is a good place to plug in a panic handling middleware, logging and metrics
-// Contains "x-api-key", "x-api-token" for legacy reasons, older interfaces might need these headers.
-func makeSetupGlobalMiddleware(appState *state.State, context *middleware.Context, telemeter *telemetry.Telemeter) func(http.Handler) http.Handler {
+// So this is a good place to plug in a panic handling middleware, logging and metrics.
+// The route context is built lazily because generating it is expensive and only
+// required when HTTP monitoring is enabled.
+func makeSetupGlobalMiddleware(appState *state.State, contextProvider func() *middleware.Context, telemeter *telemetry.Telemeter) func(http.Handler) http.Handler {
 	return func(handler http.Handler) http.Handler {
+		var routeContext *middleware.Context
+		getRouteContext := func() *middleware.Context {
+			if routeContext == nil && contextProvider != nil {
+				routeContext = contextProvider()
+			}
+			return routeContext
+		}
+
 		handleCORS := cors.New(cors.Options{
 			OptionsPassthrough: true,
 			AllowedMethods:     strings.Split(appState.ServerConfig.Config.CORS.AllowMethods, ","),
@@ -121,7 +130,7 @@ func makeSetupGlobalMiddleware(appState *state.State, context *middleware.Contex
 		if appState.ServerConfig.Config.Monitoring.Enabled {
 			handler = monitoring.InstrumentHTTP(
 				handler,
-				staticRoute(context),
+				staticRoute(getRouteContext()),
 				appState.HTTPServerMetrics.InflightRequests,
 				appState.HTTPServerMetrics.RequestDuration,
 				appState.HTTPServerMetrics.RequestBodySize,

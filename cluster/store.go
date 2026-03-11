@@ -39,6 +39,7 @@ import (
 	"github.com/weaviate/weaviate/cluster/schema"
 	"github.com/weaviate/weaviate/cluster/types"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
+	"github.com/weaviate/weaviate/entities/startuptrace"
 	"github.com/weaviate/weaviate/usecases/auth/authentication/apikey"
 	"github.com/weaviate/weaviate/usecases/auth/authorization"
 	"github.com/weaviate/weaviate/usecases/auth/authorization/rbac"
@@ -363,7 +364,9 @@ func (st *Store) lastIndex() uint64 {
 // It constructs a new Raft node using the provided configuration.
 // If there is any old state, such as snapshots, logs, peers, etc., all of those will be restored.
 func (st *Store) Open(ctx context.Context) (err error) {
+	startuptrace.Reset("cluster.store.open", "start")
 	if st.open.Load() { // store already opened
+		startuptrace.Mark("cluster.store.open", "already_open")
 		return nil
 	}
 	defer func() { st.open.Store(err == nil) }()
@@ -371,13 +374,16 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	if err := st.init(); err != nil {
 		return fmt.Errorf("initialize raft store: %w", err)
 	}
+	startuptrace.Mark("cluster.store.open", "init_done")
 
 	li := st.lastIndex()
 	st.lastAppliedIndexToDB.Store(li)
 	st.metrics.fsmStartupAppliedIndex.Set(float64(li))
+	startuptrace.Mark("cluster.store.open", "last_index_ready")
 
 	// we have to open the DB before constructing new raft in case of restore calls
 	st.openDatabase(ctx)
+	startuptrace.Mark("cluster.store.open", "database_opened")
 
 	st.log.WithFields(logrus.Fields{
 		"name":                 st.cfg.NodeID,
@@ -387,6 +393,7 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("raft.NewRaft %v %w", st.raftTransport.LocalAddr(), err)
 	}
+	startuptrace.Mark("cluster.store.open", "raft_constructed")
 
 	// Only if node recovery is enabled will we check if we are either forcing it or automating the detection of a one
 	// node cluster
@@ -410,11 +417,13 @@ func (st *Store) Open(ctx context.Context) (err error) {
 		"last_store_applied_index_on_start": st.lastAppliedIndexToDB.Load(),
 		"last_snapshot_index":               snapIndex,
 	}).Info("raft node constructed")
+	startuptrace.Mark("cluster.store.open", "state_loaded")
 
 	// There's no hard limit on the migration, so it should take as long as necessary.
 	// However, we believe that 1 day should be more than sufficient.
 	f := func() { st.onLeaderFound(time.Hour * 24) }
 	enterrors.GoWrapper(f, st.log)
+	startuptrace.Mark("cluster.store.open", "complete")
 	return nil
 }
 
@@ -595,16 +604,20 @@ func (st *Store) Ready() bool {
 // after RAFT is in a healthy state, which is when the leader has been elected and there
 // is consensus on the log.
 func (st *Store) WaitToRestoreDB(ctx context.Context, period time.Duration, close chan struct{}) error {
+	startuptrace.Reset("cluster.store.wait_restore", "start")
 	t := time.NewTicker(period)
 	defer t.Stop()
 	for {
 		select {
 		case <-close:
+			startuptrace.Mark("cluster.store.wait_restore", "closed")
 			return nil
 		case <-ctx.Done():
+			startuptrace.Mark("cluster.store.wait_restore", "context_done")
 			return ctx.Err()
 		case <-t.C:
 			if st.dbLoaded.Load() {
+				startuptrace.Mark("cluster.store.wait_restore", "ready")
 				return nil
 			} else {
 				st.log.Info("waiting for database to be restored")
@@ -803,12 +816,15 @@ func (st *Store) raftConfig() *raft.Config {
 }
 
 func (st *Store) openDatabase(ctx context.Context) {
+	startuptrace.Reset("cluster.store.open_database", "start")
 	if st.dbLoaded.Load() {
+		startuptrace.Mark("cluster.store.open_database", "already_loaded")
 		return
 	}
 
 	if st.cfg.MetadataOnlyVoters {
 		st.log.Info("Not loading local DB as the node is metadata only")
+		startuptrace.Mark("cluster.store.open_database", "metadata_only_skip")
 	} else {
 		st.log.Info("loading local db")
 		if err := st.schemaManager.Load(ctx, st.cfg.NodeID); err != nil {
@@ -816,9 +832,11 @@ func (st *Store) openDatabase(ctx context.Context) {
 			panic("error restoring database")
 		}
 		st.log.Info("local DB successfully loaded")
+		startuptrace.Mark("cluster.store.open_database", "local_db_loaded")
 	}
 
 	st.log.WithField("n", st.schemaManager.NewSchemaReader().Len()).Info("schema manager loaded")
+	startuptrace.Mark("cluster.store.open_database", "schema_manager_ready")
 }
 
 // reloadDBFromSchema() it will be called from two places Restore(), Apply()

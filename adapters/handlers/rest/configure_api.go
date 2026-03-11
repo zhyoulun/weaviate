@@ -74,6 +74,7 @@ import (
 	"github.com/weaviate/weaviate/entities/modulecapabilities"
 	"github.com/weaviate/weaviate/entities/moduletools"
 	"github.com/weaviate/weaviate/entities/replication"
+	"github.com/weaviate/weaviate/entities/startuptrace"
 	vectorIndex "github.com/weaviate/weaviate/entities/vectorindex"
 	grpcconn "github.com/weaviate/weaviate/grpc/conn"
 	modstgazure "github.com/weaviate/weaviate/modules/backup-azure"
@@ -224,6 +225,7 @@ func calcCPUs(cpuString string) (int, error) {
 }
 
 func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandLineOptionsGroup) *state.State {
+	startuptrace.Reset("rest.make_app_state", "start")
 	build.Version = ParseVersionFromSwaggerSpec() // Version is always static and loaded from swagger spec.
 
 	// config.ServerVersion is deprecated: It's there to be backward compatible
@@ -231,6 +233,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 	config.ServerVersion = build.Version
 
 	appState := startupRoutine(ctx, serverShutdownCtx, options)
+	startuptrace.Mark("rest.make_app_state", "startup_routine_done")
 
 	// Initialize OpenTelemetry tracing
 	if err := opentelemetry.Init(appState.Logger); err != nil {
@@ -363,6 +366,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 	}
 
 	limitResources(appState)
+	startuptrace.Mark("rest.make_app_state", "resources_limited")
 
 	appState.ClusterHttpClient = reasonableHttpClient(appState.ServerConfig.Config.Cluster.AuthConfig, appState.ServerConfig.Config.MinimumInternalTimeout)
 	appState.MemWatch = memwatch.NewMonitor(memwatch.LiveHeapReader, debug.SetMemoryLimit, 0.97)
@@ -459,6 +463,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 			WithField("action", "startup").WithError(err).
 			Fatal("invalid new DB")
 	}
+	startuptrace.Mark("rest.make_app_state", "db_repo_ready")
 
 	appState.DB = repo
 	if appState.ServerConfig.Config.Monitoring.Enabled {
@@ -709,7 +714,9 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 	repo.SetReindexer(reindexer)
 
 	metaStoreReady := newMetaStoreReady()
+	startuptrace.Mark("rest.make_app_state", "cluster_open_launching")
 	enterrors.GoWrapper(func() {
+		startuptrace.Reset("rest.cluster_service.open", "start")
 		if err := appState.ClusterService.Open(context.Background(), executor); err != nil {
 			appState.Logger.
 				WithField("action", "startup").
@@ -719,11 +726,15 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 		} else {
 			metaStoreReady.success()
 		}
+		startuptrace.Mark("rest.cluster_service.open", "complete")
 	}, appState.Logger)
+	startuptrace.Mark("rest.make_app_state", "cluster_open_launched")
 
-	// TODO-RAFT: refactor remove this sleep
-	// this sleep was used to block GraphQL and give time to RAFT to start.
-	time.Sleep(2 * time.Second)
+	// Embedded single-node mode does not need the historical fixed delay while
+	// waiting for a distributed cluster to elect a leader.
+	startuptrace.Mark("rest.make_app_state", "raft_wait_start")
+	waitForRaftStartup(appState)
+	startuptrace.Mark("rest.make_app_state", "raft_wait_done")
 
 	appState.AutoSchemaManager = objects.NewAutoSchemaManager(schemaManager, vectorRepo, appState.ServerConfig, appState.Authorizer,
 		appState.Logger, prometheus.DefaultRegisterer)
@@ -731,6 +742,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 		schemaManager, appState.ServerConfig, appState.Logger,
 		appState.Authorizer, appState.Metrics, appState.AutoSchemaManager)
 	appState.BatchManager = batchManager
+	startuptrace.Mark("rest.make_app_state", "object_managers_ready")
 
 	err = migrator.AdjustFilterablePropSettings(ctx)
 	if err != nil {
@@ -740,6 +752,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 			Fatal("migration failed")
 		os.Exit(1)
 	}
+	startuptrace.Mark("rest.make_app_state", "filterable_adjusted")
 
 	// FIXME to avoid import cycles, tasks are passed as strings
 	reindexTaskNamesWithArgs := map[string]any{}
@@ -822,6 +835,7 @@ func MakeAppState(ctx, serverShutdownCtx context.Context, options *swag.CommandL
 		}, appState.Logger)
 	}
 
+	startuptrace.Mark("rest.make_app_state", "complete")
 	return appState
 }
 
@@ -918,12 +932,14 @@ func parseVotersNames(cfg config.Raft) (m map[string]struct{}) {
 }
 
 func configureAPI(api *operations.WeaviateAPI) http.Handler {
+	startuptrace.Reset("rest.configure_api", "start")
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Minute)
 	defer cancel()
 
 	serverShutdownCtx, serverShutdownCancel := context.WithCancelCause(context.Background())
 	appState := MakeAppState(ctx, serverShutdownCtx, connectorOptionGroup)
+	startuptrace.Mark("rest.configure_api", "app_state_ready")
 
 	appState.Logger.WithFields(logrus.Fields{
 		"server_version": config.ServerVersion,
@@ -959,6 +975,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		appState.Metrics,
 		appState.Authorizer,
 		appState.Logger)
+	startuptrace.Mark("rest.configure_api", "auth_handlers_ready")
 
 	replicationHandlers.SetupHandlers(appState.ServerConfig.Config.ReplicaMovementEnabled, api, appState.ClusterService.Raft, appState.Metrics, appState.Authorizer, appState.Logger)
 
@@ -975,8 +992,10 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 	setupObjectHandlers(api, objectsManager, appState.ServerConfig.Config, appState.Logger,
 		appState.Modules, appState.Metrics)
 	setupObjectBatchHandlers(api, appState.BatchManager, appState.Metrics, appState.Logger)
+	startuptrace.Mark("rest.configure_api", "object_handlers_ready")
 	setupGraphQLHandlers(api, appState, appState.SchemaManager, appState.ServerConfig.Config.DisableGraphQL,
 		appState.Metrics, appState.Logger)
+	startuptrace.Mark("rest.configure_api", "graphql_handlers_ready")
 	setupMiscHandlers(api, appState.ServerConfig, appState.Modules,
 		appState.Metrics, appState.Logger)
 	setupClassificationHandlers(api, classifier, appState.Metrics, appState.Logger)
@@ -988,6 +1007,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 	if appState.ServerConfig.Config.DistributedTasks.Enabled {
 		setupDistributedTasksHandlers(api, appState.Authorizer, appState.ClusterService.Raft)
 	}
+	startuptrace.Mark("rest.configure_api", "api_handlers_ready")
 
 	var grpcInstrument []grpc.ServerOption
 	if appState.ServerConfig.Config.Monitoring.Enabled {
@@ -999,17 +1019,24 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 	if !appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork {
 		grpcServer, batchDrain = createGrpcServer(appState, grpcInstrument...)
 	}
+	startuptrace.Mark("rest.configure_api", "grpc_ready")
 
-	telemeter := telemetry.New(
-		appState.DB,
-		appState.SchemaManager,
-		appState.Logger,
-		getTelemetryURL(appState),
-		appState.ServerConfig.Config.TelemetryPushInterval,
-	)
+	var telemeter *telemetry.Telemeter
+	if telemetryEnabled(appState) {
+		telemeter = telemetry.New(
+			appState.DB,
+			appState.SchemaManager,
+			appState.Logger,
+			getTelemetryURL(appState),
+			appState.ServerConfig.Config.TelemetryPushInterval,
+		)
+	}
+	startuptrace.Mark("rest.configure_api", "telemeter_ready")
 
 	setupMiddlewares := makeSetupMiddlewares(appState)
-	setupGlobalMiddleware := makeSetupGlobalMiddleware(appState, api.Context(), telemeter)
+	startuptrace.Mark("rest.configure_api", "middleware_ready")
+	setupGlobalMiddleware := makeSetupGlobalMiddleware(appState, api.Context, telemeter)
+	startuptrace.Mark("rest.configure_api", "global_middleware_ready")
 	if telemetryEnabled(appState) {
 		enterrors.GoWrapper(func() {
 			if err := telemeter.Start(context.Background()); err != nil {
@@ -1028,6 +1055,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 				backupScheduler.CleanupUnfinishedBackups(ctx)
 			}, appState.Logger)
 	}
+	startuptrace.Mark("rest.configure_api", "background_tasks_ready")
 
 	api.PreServerShutdown = func() {
 		batchDrain()
@@ -1116,7 +1144,32 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		startGrpcServer(grpcServer, appState)
 	}
 
+	startuptrace.Mark("rest.configure_api", "handler_ready")
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
+}
+
+func waitForRaftStartup(appState *state.State) {
+	if !shouldWaitForRaftStartup(appState) {
+		return
+	}
+
+	time.Sleep(2 * time.Second)
+}
+
+func shouldWaitForRaftStartup(appState *state.State) bool {
+	if appState == nil || appState.ServerConfig == nil {
+		return true
+	}
+
+	if !appState.ServerConfig.Config.Cluster.EmbeddedNoNetwork {
+		return true
+	}
+
+	if appState.ServerConfig.Config.Raft.BootstrapExpect > 1 {
+		return true
+	}
+
+	return len(appState.ServerConfig.Config.Raft.Join) > 1
 }
 
 func startBackupScheduler(appState *state.State) *backup.Scheduler {
@@ -1159,6 +1212,7 @@ func startExportScheduler(shutdownCtx context.Context, appState *state.State) *e
 
 // TODO: Split up and don't write into global variables. Instead return an appState
 func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.CommandLineOptionsGroup) *state.State {
+	startuptrace.Reset("rest.startup_routine", "start")
 	appState := &state.State{}
 
 	logger := logger()
@@ -1180,6 +1234,7 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 		logger.WithField("action", "startup").WithError(err).Error("could not load config")
 		logger.Exit(1)
 	}
+	startuptrace.Mark("rest.startup_routine", "config_loaded")
 	// Initialize runtime config and load overridden config
 	runtimeConfigManager := initRuntimeOverrides(appState)
 	dataPath := serverConfig.Config.Persistence.DataPath
@@ -1242,6 +1297,7 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 			Error("could not init cluster state")
 		logger.Exit(1)
 	}
+	startuptrace.Mark("rest.startup_routine", "cluster_state_ready")
 
 	appState.Cluster = clusterState
 	appState.Logger.
@@ -1254,6 +1310,7 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 			WithField("action", "startup").WithError(err).
 			Fatal("modules didn't load")
 	}
+	startuptrace.Mark("rest.startup_routine", "modules_registered")
 	// while we accept an overall longer startup, e.g. due to a recovery, we
 	// still want to limit the module startup context, as that's mostly service
 	// discovery / dependency checking
@@ -1265,6 +1322,7 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 			WithField("action", "startup").WithError(err).
 			Fatal("modules didn't initialize")
 	}
+	startuptrace.Mark("rest.startup_routine", "modules_initialized")
 	// now that modules are loaded we can run the remaining config validation
 	// which is module dependent
 	if err := appState.ServerConfig.Config.ValidateModules(appState.Modules); err != nil {
@@ -1272,9 +1330,11 @@ func startupRoutine(ctx, serverShutdownCtx context.Context, options *swag.Comman
 			WithField("action", "startup").WithError(err).
 			Fatal("invalid config")
 	}
+	startuptrace.Mark("rest.startup_routine", "modules_validated")
 
 	// Initialize runtime config hooks and start runtime config background process
 	postInitRuntimeOverrides(appState, runtimeConfigManager)
+	startuptrace.Mark("rest.startup_routine", "complete")
 
 	return appState
 }
@@ -1356,6 +1416,7 @@ func applyLogPath(logger *logrus.Logger, path string) {
 
 // everything hard-coded right now, to be made dynamic (from go plugins later)
 func registerModules(appState *state.State) error {
+	startuptrace.Reset("rest.register_modules", "start")
 	appState.Logger.
 		WithField("action", "startup").
 		Debug("start registering modules")
@@ -1968,6 +2029,7 @@ func registerModules(appState *state.State) error {
 	appState.Logger.
 		WithField("action", "startup").
 		Debug("completed registering modules")
+	startuptrace.Mark("rest.register_modules", "complete")
 
 	return nil
 }
@@ -1995,6 +2057,7 @@ func postInitModules(appState *state.State) {
 }
 
 func initModules(ctx context.Context, appState *state.State) error {
+	startuptrace.Reset("rest.init_modules", "start")
 	storageProvider, err := modulestorage.NewRepo(
 		appState.ServerConfig.Config.Persistence.DataPath, appState.Logger)
 	if err != nil {
@@ -2016,6 +2079,7 @@ func initModules(ctx context.Context, appState *state.State) error {
 	appState.Logger.
 		WithField("action", "startup").
 		Debug("finished initializing modules")
+	startuptrace.Mark("rest.init_modules", "complete")
 
 	return nil
 }

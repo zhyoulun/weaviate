@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -34,31 +35,36 @@ type cloudInfoProvider interface {
 type cloudInfoHelper struct {
 	provider cloudInfoProvider
 	logger   logrus.FieldLogger
+	once     sync.Once
 }
 
 func newCloudInfoHelper(logger logrus.FieldLogger) *cloudInfoHelper {
-	aws := newAWSCloudInfo("http://169.254.169.254")
-	if aws.isDetected() {
-		logTelemetryInfo(logger)
-		return &cloudInfoHelper{logger: logger, provider: aws}
-	}
-
-	gcp := newGCPCloudInfo("http://metadata.google.internal/computeMetadata/v1")
-	if gcp.isDetected() {
-		logTelemetryInfo(logger)
-		return &cloudInfoHelper{logger: logger, provider: gcp}
-	}
-
-	azure := newAzureCloudInfo("http://169.254.169.254", "2021-02-01")
-	if azure.isDetected() {
-		logTelemetryInfo(logger)
-		return &cloudInfoHelper{logger: logger, provider: azure}
-	}
-
 	return &cloudInfoHelper{logger: logger}
 }
 
 func (c *cloudInfoHelper) getCloudInfo() *cloudInfo {
+	c.once.Do(func() {
+		aws := newAWSCloudInfo("http://169.254.169.254")
+		if aws.isDetected() {
+			logTelemetryInfo(c.logger)
+			c.provider = aws
+			return
+		}
+
+		gcp := newGCPCloudInfo("http://metadata.google.internal/computeMetadata/v1")
+		if gcp.isDetected() {
+			logTelemetryInfo(c.logger)
+			c.provider = gcp
+			return
+		}
+
+		azure := newAzureCloudInfo("http://169.254.169.254", "2021-02-01")
+		if azure.isDetected() {
+			logTelemetryInfo(c.logger)
+			c.provider = azure
+		}
+	})
+
 	if c.provider != nil {
 		return c.provider.getCloudInfo()
 	}
